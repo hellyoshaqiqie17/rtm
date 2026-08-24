@@ -23,6 +23,37 @@ interface TVPlayerProps {
   onUrlChange?: (newUrl: string) => void;
 }
 
+// Helper function: Calculate wall-clock pseudolive synchronization for 24/7 playlists
+function getPlaylistRealtimeSync(items: Array<{ playbackUrl: string; durationSeconds?: number }>) {
+  if (!items || items.length === 0) {
+    return { trackIndex: 0, seekTime: 0 };
+  }
+
+  const defaultDuration = 180; // 3 minutes fallback if duration is unknown
+  const durations = items.map(item => (item.durationSeconds && item.durationSeconds > 0 ? item.durationSeconds : defaultDuration));
+  const totalDuration = durations.reduce((acc, dur) => acc + dur, 0);
+
+  if (totalDuration <= 0) {
+    return { trackIndex: 0, seekTime: 0 };
+  }
+
+  // Absolute wall-clock time in seconds
+  const nowInSeconds = Math.floor(Date.now() / 1000);
+  const currentLoopPosition = nowInSeconds % totalDuration;
+
+  let accumulated = 0;
+  for (let i = 0; i < items.length; i++) {
+    const trackDuration = durations[i];
+    if (currentLoopPosition < accumulated + trackDuration) {
+      const seekTime = currentLoopPosition - accumulated;
+      return { trackIndex: i, seekTime };
+    }
+    accumulated += trackDuration;
+  }
+
+  return { trackIndex: 0, seekTime: 0 };
+}
+
 export default function TVPlayer({ channel: customChannel, streamUrl: propStreamUrl }: TVPlayerProps) {
   const {
     channels,
@@ -197,11 +228,24 @@ export default function TVPlayer({ channel: customChannel, streamUrl: propStream
             const data = await res.json();
             if (data.items && data.items.length > 0) {
               setPlaylistItems(data.items);
-              setCurrentPlaylistIdx(0);
+              const sync = getPlaylistRealtimeSync(data.items);
+              setCurrentPlaylistIdx(sync.trackIndex);
               setLoading(false);
               setError(null);
-              video.src = data.items[0].playbackUrl;
-              video.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
+              video.src = data.items[sync.trackIndex].playbackUrl;
+
+              const handleMetadata = () => {
+                if (sync.seekTime > 0 && video.duration && sync.seekTime < video.duration) {
+                  video.currentTime = sync.seekTime;
+                }
+                video.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
+                video.removeEventListener('loadedmetadata', handleMetadata);
+              };
+
+              video.addEventListener('loadedmetadata', handleMetadata);
+              if (video.readyState >= 1) {
+                handleMetadata();
+              }
               return;
             } else {
               setLoading(false);
@@ -319,11 +363,21 @@ export default function TVPlayer({ channel: customChannel, streamUrl: propStream
 
     const handleEnded = () => {
       if (activeSource === 'playlist' && playlistItems.length > 0) {
-        // Advance to next video in playlist
-        const nextIdx = (currentPlaylistIdx + 1) % playlistItems.length;
-        setCurrentPlaylistIdx(nextIdx);
-        video.src = playlistItems[nextIdx].playbackUrl;
-        video.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
+        const sync = getPlaylistRealtimeSync(playlistItems);
+        setCurrentPlaylistIdx(sync.trackIndex);
+        video.src = playlistItems[sync.trackIndex].playbackUrl;
+
+        const handleMetadata = () => {
+          if (sync.seekTime > 0 && video.duration && sync.seekTime < video.duration) {
+            video.currentTime = sync.seekTime;
+          }
+          video.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
+          video.removeEventListener('loadedmetadata', handleMetadata);
+        };
+        video.addEventListener('loadedmetadata', handleMetadata);
+        if (video.readyState >= 1) {
+          handleMetadata();
+        }
       } else if (activeSource === 'recording' || (!isLiveBroadcasting && activeSource === 'hls')) {
         // Replay video ended -> loop from beginning
         video.currentTime = 0;
@@ -334,6 +388,35 @@ export default function TVPlayer({ channel: customChannel, streamUrl: propStream
     video.addEventListener('ended', handleEnded);
     return () => video.removeEventListener('ended', handleEnded);
   }, [activeSource, playlistItems, currentPlaylistIdx, isLiveBroadcasting]);
+
+  // Periodic Wall-Clock Pseudolive Synchronization for 24/7 MP4 Playlist
+  useEffect(() => {
+    if (activeSource !== 'playlist' || !playlistItems.length) return;
+    const interval = setInterval(() => {
+      const video = videoRef.current;
+      if (!video) return;
+
+      const sync = getPlaylistRealtimeSync(playlistItems);
+      if (sync.trackIndex !== currentPlaylistIdx) {
+        setCurrentPlaylistIdx(sync.trackIndex);
+        video.src = playlistItems[sync.trackIndex].playbackUrl;
+        const handleMetadata = () => {
+          if (sync.seekTime > 0 && video.duration && sync.seekTime < video.duration) {
+            video.currentTime = sync.seekTime;
+          }
+          video.play().catch(console.error);
+          video.removeEventListener('loadedmetadata', handleMetadata);
+        };
+        video.addEventListener('loadedmetadata', handleMetadata);
+      } else if (isPlaying && Math.abs(video.currentTime - sync.seekTime) > 5) {
+        if (video.duration && sync.seekTime < video.duration) {
+          video.currentTime = sync.seekTime;
+        }
+      }
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [activeSource, playlistItems, currentPlaylistIdx, isPlaying]);
 
   // Video Timeupdate & Seekbar Listener
   useEffect(() => {

@@ -20,6 +20,37 @@ interface RadioPlayerProps {
   onUrlChange?: (newUrl: string) => void;
 }
 
+// Helper function: Calculate wall-clock pseudolive synchronization for 24/7 playlists
+function getPlaylistRealtimeSync(items: Array<{ playbackUrl: string; durationSeconds?: number }>) {
+  if (!items || items.length === 0) {
+    return { trackIndex: 0, seekTime: 0 };
+  }
+
+  const defaultDuration = 180; // 3 minutes fallback if duration is unknown
+  const durations = items.map(item => (item.durationSeconds && item.durationSeconds > 0 ? item.durationSeconds : defaultDuration));
+  const totalDuration = durations.reduce((acc, dur) => acc + dur, 0);
+
+  if (totalDuration <= 0) {
+    return { trackIndex: 0, seekTime: 0 };
+  }
+
+  // Absolute wall-clock time in seconds
+  const nowInSeconds = Math.floor(Date.now() / 1000);
+  const currentLoopPosition = nowInSeconds % totalDuration;
+
+  let accumulated = 0;
+  for (let i = 0; i < items.length; i++) {
+    const trackDuration = durations[i];
+    if (currentLoopPosition < accumulated + trackDuration) {
+      const seekTime = currentLoopPosition - accumulated;
+      return { trackIndex: i, seekTime };
+    }
+    accumulated += trackDuration;
+  }
+
+  return { trackIndex: 0, seekTime: 0 };
+}
+
 export default function RadioPlayer({ streamUrl: propStreamUrl }: RadioPlayerProps) {
   const { radioChannels, activeRadioChannel, setActiveRadioChannelId } = useStreamContext();
 
@@ -61,10 +92,23 @@ export default function RadioPlayer({ streamUrl: propStreamUrl }: RadioPlayerPro
             const data = await res.json();
             if (data.items && data.items.length > 0) {
               setPlaylistTracks(data.items);
-              setCurrentTrackIdx(0);
-              audio.src = data.items[0].playbackUrl;
-              if (isPlaying) {
-                audio.play().catch(console.error);
+              const sync = getPlaylistRealtimeSync(data.items);
+              setCurrentTrackIdx(sync.trackIndex);
+              audio.src = data.items[sync.trackIndex].playbackUrl;
+
+              const handleMetadata = () => {
+                if (sync.seekTime > 0 && audio.duration && sync.seekTime < audio.duration) {
+                  audio.currentTime = sync.seekTime;
+                }
+                if (isPlaying) {
+                  audio.play().catch(console.error);
+                }
+                audio.removeEventListener('loadedmetadata', handleMetadata);
+              };
+
+              audio.addEventListener('loadedmetadata', handleMetadata);
+              if (audio.readyState >= 1) {
+                handleMetadata();
               }
               return;
             }
@@ -73,32 +117,75 @@ export default function RadioPlayer({ streamUrl: propStreamUrl }: RadioPlayerPro
           console.error('Error fetching radio playlist in player:', err);
         }
         // Fallback to stream endpoint if playlist is empty or fails
-        audio.src = streamEndpoint;
+        if (audio.src !== streamEndpoint) {
+          audio.src = streamEndpoint;
+        }
       };
       loadRadioPlaylist();
     } else {
       setIsPlaylistMode(false);
-      audio.src = streamEndpoint;
-      if (isPlaying) {
-        audio.play().catch(console.error);
+      if (audio.src !== streamEndpoint) {
+        audio.src = streamEndpoint;
+        if (isPlaying) {
+          audio.play().catch(console.error);
+        }
       }
     }
-  }, [currentStation?.id, currentStation?.activeSource, streamEndpoint]);
+  }, [currentStation?.id, currentStation?.activeSource]);
 
   // Handle Track Ended for Radio Playlist 24/7 (AutoDJ Loop)
   const handleAudioEnded = () => {
     if (isPlaylistMode && playlistTracks.length > 0) {
-      const nextIdx = (currentTrackIdx + 1) % playlistTracks.length;
-      setCurrentTrackIdx(nextIdx);
+      const sync = getPlaylistRealtimeSync(playlistTracks);
+      setCurrentTrackIdx(sync.trackIndex);
       const audio = audioRef.current;
-      if (audio && playlistTracks[nextIdx]) {
-        audio.src = playlistTracks[nextIdx].playbackUrl;
-        audio.play().then(() => setIsPlaying(true)).catch(console.error);
+      if (audio && playlistTracks[sync.trackIndex]) {
+        audio.src = playlistTracks[sync.trackIndex].playbackUrl;
+        const handleMetadata = () => {
+          if (sync.seekTime > 0 && audio.duration && sync.seekTime < audio.duration) {
+            audio.currentTime = sync.seekTime;
+          }
+          audio.play().then(() => setIsPlaying(true)).catch(console.error);
+          audio.removeEventListener('loadedmetadata', handleMetadata);
+        };
+        audio.addEventListener('loadedmetadata', handleMetadata);
+        if (audio.readyState >= 1) {
+          handleMetadata();
+        }
       }
     } else {
       setIsPlaying(false);
     }
   };
+
+  // Periodic Wall-Clock Pseudolive Synchronization for 24/7 Radio MP3 Playlist
+  useEffect(() => {
+    if (!isPlaylistMode || !playlistTracks.length) return;
+    const interval = setInterval(() => {
+      const audio = audioRef.current;
+      if (!audio) return;
+
+      const sync = getPlaylistRealtimeSync(playlistTracks);
+      if (sync.trackIndex !== currentTrackIdx) {
+        setCurrentTrackIdx(sync.trackIndex);
+        audio.src = playlistTracks[sync.trackIndex].playbackUrl;
+        const handleMetadata = () => {
+          if (sync.seekTime > 0 && audio.duration && sync.seekTime < audio.duration) {
+            audio.currentTime = sync.seekTime;
+          }
+          if (isPlaying) audio.play().catch(console.error);
+          audio.removeEventListener('loadedmetadata', handleMetadata);
+        };
+        audio.addEventListener('loadedmetadata', handleMetadata);
+      } else if (isPlaying && Math.abs(audio.currentTime - sync.seekTime) > 5) {
+        if (audio.duration && sync.seekTime < audio.duration) {
+          audio.currentTime = sync.seekTime;
+        }
+      }
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [isPlaylistMode, playlistTracks, currentTrackIdx, isPlaying]);
 
   const handleNextTrack = () => {
     if (!playlistTracks.length) return;
@@ -322,7 +409,7 @@ export default function RadioPlayer({ streamUrl: propStreamUrl }: RadioPlayerPro
               {/* Status Badge */}
               <div className="absolute -bottom-2 px-3.5 py-1 rounded-full bg-[#121212] border border-white/10 text-[11px] font-bold text-white shadow-md flex items-center gap-1.5 font-sans">
                 <span className="w-2 h-2 rounded-full bg-[#E50914] animate-pulse"></span>
-                <span>{isPlaylistMode ? 'AUTODJ 24/7 PLAYLIST' : 'RADIO LIVE 24/7'}</span>
+                <span>RADIO LIVE 24/7</span>
               </div>
             </div>
           </div>
@@ -336,12 +423,10 @@ export default function RadioPlayer({ streamUrl: propStreamUrl }: RadioPlayerPro
                 SIARAN RADIO UTAMA ({currentStation.name})
               </span>
               <h3 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight line-clamp-1 font-sans">
-                {isPlaylistMode && currentTrack ? currentTrack.filename : currentStation.name}
+                {currentStation.name}
               </h3>
               <p className="text-sm text-neutral-300 font-medium mt-1 font-sans">
-                {isPlaylistMode && currentTrack
-                  ? `Lagu ${currentTrackIdx + 1} dari ${playlistTracks.length} (AutoDJ Rotasi 24 Jam)`
-                  : currentStation.description}
+                {currentStation.name} sedang mengudara live 24 jam non-stop.
               </p>
             </div>
 
@@ -353,37 +438,13 @@ export default function RadioPlayer({ streamUrl: propStreamUrl }: RadioPlayerPro
                 height={40}
                 className="w-full h-10 rounded-lg"
               />
-
-              {/* Track Progress Bar (Playlist mode) */}
-              {isPlaylistMode && duration > 0 && (
-                <div className="flex items-center justify-between text-[10px] text-neutral-400 font-mono pt-1">
-                  <span>{formatTime(currentTime)}</span>
-                  <div className="flex-1 mx-3 bg-white/10 h-1.5 rounded-full overflow-hidden">
-                    <div
-                      className="bg-gradient-to-r from-red-600 to-amber-500 h-full transition-all duration-200"
-                      style={{ width: `${Math.min(100, (currentTime / duration) * 100)}%` }}
-                    />
-                  </div>
-                  <span>{formatTime(duration)}</span>
-                </div>
-              )}
             </div>
 
             {/* Main Player Controls */}
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-3 border-t border-white/10">
               
-              {/* Play / Pause Toggle & Next/Prev Controls */}
+              {/* Play / Pause Toggle Controls */}
               <div className="flex items-center gap-3">
-                {isPlaylistMode && playlistTracks.length > 1 && (
-                  <button
-                    onClick={handlePrevTrack}
-                    className="p-3 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-300 hover:text-white transition-all cursor-pointer"
-                    title="Lagu Sebelumnya"
-                  >
-                    <SkipBack className="w-5 h-5" />
-                  </button>
-                )}
-
                 <button
                   onClick={togglePlay}
                   disabled={loading}
@@ -398,22 +459,12 @@ export default function RadioPlayer({ streamUrl: propStreamUrl }: RadioPlayerPro
                   )}
                 </button>
 
-                {isPlaylistMode && playlistTracks.length > 1 && (
-                  <button
-                    onClick={handleNextTrack}
-                    className="p-3 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-300 hover:text-white transition-all cursor-pointer"
-                    title="Lagu Berikutnya"
-                  >
-                    <SkipForward className="w-5 h-5" />
-                  </button>
-                )}
-
                 <div className="text-left">
                   <span className="text-xs font-bold text-white block font-sans">
-                    {isPlaying ? 'Siaran Radio Sedang Diputar' : 'Tekan Play Untuk Mendengar'}
+                    {isPlaying ? 'Siaran Radio Sedang Diputar (Live)' : 'Tekan Play Untuk Mendengarkan'}
                   </span>
                   <span className="text-[11px] text-neutral-400 font-sans">
-                    {isPlaylistMode ? 'AutoDJ Rotasi MP3 24 Jam' : 'Siaran audio jernih 24 jam non-stop'}
+                    Siaran audio jernih 24 jam non-stop
                   </span>
                 </div>
               </div>

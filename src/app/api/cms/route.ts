@@ -54,7 +54,8 @@ function getFromPostgres() {
       `SELECT json_agg(json_build_object(
         'id', id, 'name', name, 'description', description,
         'streamUrl', stream_url, 'thumbnail', thumbnail,
-        'category', category, 'enabled', enabled
+        'category', category, 'enabled', enabled,
+        'activeSource', COALESCE(active_source, 'icecast')
       )) FROM radio_channels;`
     );
 
@@ -163,16 +164,18 @@ function saveToPostgres(data: any) {
 
     // 3. Sync Radio Channels
     if (Array.isArray(data.radioChannels)) {
+      queryPg(`ALTER TABLE radio_channels ADD COLUMN IF NOT EXISTS active_source TEXT DEFAULT 'icecast';`);
       queryPg(`DELETE FROM radio_channels;`);
       for (const r of data.radioChannels) {
-        const sql = `INSERT INTO radio_channels (id, name, description, stream_url, thumbnail, category, enabled) VALUES (
+        const sql = `INSERT INTO radio_channels (id, name, description, stream_url, thumbnail, category, enabled, active_source) VALUES (
           ${sqlVal(r.id)},
           ${sqlVal(r.name)},
           ${sqlVal(r.description || '')},
           ${sqlVal(r.streamUrl)},
           ${sqlVal(r.thumbnail)},
           ${sqlVal(r.category || '')},
-          ${r.enabled !== false ? 'TRUE' : 'FALSE'}
+          ${r.enabled !== false ? 'TRUE' : 'FALSE'},
+          ${sqlVal(r.activeSource || 'icecast')}
         );`;
         queryPg(sql);
       }
