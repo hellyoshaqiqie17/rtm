@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #050505;
+  --surface: #121212;
+  --accent: #E50914;
+  --muted: #A3A3A3;
+}
+
+body {
+  background-color: #050505;
+  color: #FFFFFF;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Noto Sans, Arial, sans-serif;
+  overflow-x: hidden;
+}
+
+::selection {
+  background-color: #E50914;
+  color: #FFFFFF;
+}
+
+/* Custom dark scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #050505;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #262626;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #E50914;
+}
+
+/* Glassmorphism helpers */
+.glass-panel {
+  background-color: rgba(18, 18, 18, 0.6);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.glass-panel:hover {
+  background-color: rgba(18, 18, 18, 0.9);
+  border-color: rgba(255, 255, 255, 0.1);
+}

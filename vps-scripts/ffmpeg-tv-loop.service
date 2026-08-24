@@ -1,0 +1,15 @@
+[Unit]
+Description=FFmpeg 24/7 MP4 Video Playlist Looper to MediaMTX RTMP
+After=mediamtx.service
+Requires=mediamtx.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/var/media/tv
+ExecStart=/usr/bin/ffmpeg -re -f concat -safe 0 -i /var/media/tv/playlist.txt -c:v libx264 -preset fast -maxrate 3000k -bufsize 6000k -pix_fmt yuv420p -g 50 -c:a aac -b:a 128k -ar 44100 -f flv rtmp://localhost:1935/live/tv
+Restart=always
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,27 @@
+# MediaMTX Configuration File for RTM Streaming Platform
+# Handles RTMP ingest from OBS/FFmpeg & HLS output for Web Players
+
+logLevel: info
+logDestinations: [stdout]
+
+# Enable RTMP Server
+rtmp: yes
+rtmpAddress: :1935
+
+# Enable HLS Server
+hls: yes
+hlsAddress: :8888
+hlsAlwaysRemux: yes
+hlsVariant: mpegts
+hlsSegmentCount: 7
+hlsSegmentDuration: 2s
+hlsPartDuration: 200ms
+hlsAllowOrigin: '*'
+
+# Stream Paths Definition
+paths:
+  all:
+    # Accept any incoming stream key
+  tv:
+    source: publisher
+    hls: yes
