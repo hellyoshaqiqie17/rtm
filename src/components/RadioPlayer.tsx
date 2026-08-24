@@ -8,7 +8,11 @@ import {
   Volume2,
   VolumeX,
   Radio as RadioIcon,
-  Layers
+  Layers,
+  SkipForward,
+  SkipBack,
+  Music,
+  Disc
 } from 'lucide-react';
 
 interface RadioPlayerProps {
@@ -33,6 +37,9 @@ export default function RadioPlayer({ streamUrl: propStreamUrl }: RadioPlayerPro
   const [playlistTracks, setPlaylistTracks] = useState<any[]>([]);
   const [currentTrackIdx, setCurrentTrackIdx] = useState<number>(0);
   const [isPlaylistMode, setIsPlaylistMode] = useState<boolean>(false);
+  const [currentTime, setCurrentTime] = useState<number>(0);
+  const [duration, setDuration] = useState<number>(0);
+
   const stationSlug = currentStation?.streamUrl
     ? currentStation.streamUrl.replace('/radio/', '').replace('/radio', '') || 'live'
     : 'live';
@@ -93,6 +100,32 @@ export default function RadioPlayer({ streamUrl: propStreamUrl }: RadioPlayerPro
     }
   };
 
+  const handleNextTrack = () => {
+    if (!playlistTracks.length) return;
+    const nextIdx = (currentTrackIdx + 1) % playlistTracks.length;
+    setCurrentTrackIdx(nextIdx);
+    const audio = audioRef.current;
+    if (audio && playlistTracks[nextIdx]) {
+      audio.src = playlistTracks[nextIdx].playbackUrl;
+      if (isPlaying) {
+        audio.play().catch(console.error);
+      }
+    }
+  };
+
+  const handlePrevTrack = () => {
+    if (!playlistTracks.length) return;
+    const prevIdx = (currentTrackIdx - 1 + playlistTracks.length) % playlistTracks.length;
+    setCurrentTrackIdx(prevIdx);
+    const audio = audioRef.current;
+    if (audio && playlistTracks[prevIdx]) {
+      audio.src = playlistTracks[prevIdx].playbackUrl;
+      if (isPlaying) {
+        audio.play().catch(console.error);
+      }
+    }
+  };
+
   // Visualizer Animation setup
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -104,7 +137,7 @@ export default function RadioPlayer({ streamUrl: propStreamUrl }: RadioPlayerPro
 
     const renderVisualizer = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      const barCount = 32;
+      const barCount = 36;
       const barWidth = (canvas.width / barCount) - 2;
 
       for (let i = 0; i < barCount; i++) {
@@ -155,9 +188,9 @@ export default function RadioPlayer({ streamUrl: propStreamUrl }: RadioPlayerPro
           setLoading(false);
         })
         .catch(err => {
-          console.error(err);
+          console.error('Audio play error:', err);
           setLoading(false);
-          setError('Siaran radio belum dapat dimuat. Silakan muat ulang.');
+          setError('Siaran radio belum dapat dimuat. Silakan periksa koneksi internet atau muat ulang halaman.');
         });
     }
   };
@@ -179,6 +212,15 @@ export default function RadioPlayer({ streamUrl: propStreamUrl }: RadioPlayerPro
       setIsMuted(val === 0);
     }
   };
+
+  const formatTime = (secs: number) => {
+    if (!secs || isNaN(secs) || secs < 0) return '0:00';
+    const m = Math.floor(secs / 60);
+    const s = Math.floor(secs % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const currentTrack = playlistTracks[currentTrackIdx];
 
   if (!currentStation || !currentStation.id) {
     return (
@@ -202,6 +244,12 @@ export default function RadioPlayer({ streamUrl: propStreamUrl }: RadioPlayerPro
         ref={audioRef}
         preload="none"
         onEnded={handleAudioEnded}
+        onTimeUpdate={() => {
+          if (audioRef.current) setCurrentTime(audioRef.current.currentTime);
+        }}
+        onLoadedMetadata={() => {
+          if (audioRef.current) setDuration(audioRef.current.duration);
+        }}
         onError={() => {
           setLoading(false);
           setIsPlaying(false);
@@ -209,7 +257,7 @@ export default function RadioPlayer({ streamUrl: propStreamUrl }: RadioPlayerPro
       />
 
       {/* Multi Radio Station Switcher Pills */}
-      <div className="flex items-center justify-between bg-[#121212] p-3 rounded-2xl border border-white/5 shadow-md">
+      <div className="flex items-center justify-between bg-[#121212] p-3 rounded-2xl border border-white/5 shadow-md flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <Layers className="w-4 h-4 text-[#E50914]" />
           <span className="text-xs font-bold text-white uppercase tracking-wide">
@@ -274,7 +322,7 @@ export default function RadioPlayer({ streamUrl: propStreamUrl }: RadioPlayerPro
               {/* Status Badge */}
               <div className="absolute -bottom-2 px-3.5 py-1 rounded-full bg-[#121212] border border-white/10 text-[11px] font-bold text-white shadow-md flex items-center gap-1.5 font-sans">
                 <span className="w-2 h-2 rounded-full bg-[#E50914] animate-pulse"></span>
-                <span>RADIO LIVE 24/7</span>
+                <span>{isPlaylistMode ? 'AUTODJ 24/7 PLAYLIST' : 'RADIO LIVE 24/7'}</span>
               </div>
             </div>
           </div>
@@ -285,31 +333,57 @@ export default function RadioPlayer({ streamUrl: propStreamUrl }: RadioPlayerPro
             {/* Station Title & Program Description */}
             <div>
               <span className="text-[11px] uppercase font-sans tracking-wider text-[#E50914] font-bold block mb-1">
-                SIARAN RADIO UTAMA
+                SIARAN RADIO UTAMA ({currentStation.name})
               </span>
               <h3 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight line-clamp-1 font-sans">
-                {currentStation.name}
+                {isPlaylistMode && currentTrack ? currentTrack.filename : currentStation.name}
               </h3>
               <p className="text-sm text-neutral-300 font-medium mt-1 font-sans">
-                {currentStation.description}
+                {isPlaylistMode && currentTrack
+                  ? `Lagu ${currentTrackIdx + 1} dari ${playlistTracks.length} (AutoDJ Rotasi 24 Jam)`
+                  : currentStation.description}
               </p>
             </div>
 
             {/* Audio Canvas Equalizer Visualizer */}
-            <div className="bg-black/60 p-3 rounded-2xl border border-white/10">
+            <div className="bg-black/60 p-3 rounded-2xl border border-white/10 space-y-2">
               <canvas
                 ref={canvasRef}
                 width={360}
                 height={40}
                 className="w-full h-10 rounded-lg"
               />
+
+              {/* Track Progress Bar (Playlist mode) */}
+              {isPlaylistMode && duration > 0 && (
+                <div className="flex items-center justify-between text-[10px] text-neutral-400 font-mono pt-1">
+                  <span>{formatTime(currentTime)}</span>
+                  <div className="flex-1 mx-3 bg-white/10 h-1.5 rounded-full overflow-hidden">
+                    <div
+                      className="bg-gradient-to-r from-red-600 to-amber-500 h-full transition-all duration-200"
+                      style={{ width: `${Math.min(100, (currentTime / duration) * 100)}%` }}
+                    />
+                  </div>
+                  <span>{formatTime(duration)}</span>
+                </div>
+              )}
             </div>
 
             {/* Main Player Controls */}
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-3 border-t border-white/10">
               
-              {/* Play / Pause Toggle Button */}
+              {/* Play / Pause Toggle & Next/Prev Controls */}
               <div className="flex items-center gap-3">
+                {isPlaylistMode && playlistTracks.length > 1 && (
+                  <button
+                    onClick={handlePrevTrack}
+                    className="p-3 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-300 hover:text-white transition-all cursor-pointer"
+                    title="Lagu Sebelumnya"
+                  >
+                    <SkipBack className="w-5 h-5" />
+                  </button>
+                )}
+
                 <button
                   onClick={togglePlay}
                   disabled={loading}
@@ -324,12 +398,22 @@ export default function RadioPlayer({ streamUrl: propStreamUrl }: RadioPlayerPro
                   )}
                 </button>
 
+                {isPlaylistMode && playlistTracks.length > 1 && (
+                  <button
+                    onClick={handleNextTrack}
+                    className="p-3 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-300 hover:text-white transition-all cursor-pointer"
+                    title="Lagu Berikutnya"
+                  >
+                    <SkipForward className="w-5 h-5" />
+                  </button>
+                )}
+
                 <div className="text-left">
                   <span className="text-xs font-bold text-white block font-sans">
                     {isPlaying ? 'Siaran Radio Sedang Diputar' : 'Tekan Play Untuk Mendengar'}
                   </span>
                   <span className="text-[11px] text-neutral-400 font-sans">
-                    Siaran audio jernih 24 jam non-stop
+                    {isPlaylistMode ? 'AutoDJ Rotasi MP3 24 Jam' : 'Siaran audio jernih 24 jam non-stop'}
                   </span>
                 </div>
               </div>

@@ -88,6 +88,7 @@ export default function RadioPlaylistManagerModal({ station, onClose }: RadioPla
     const lowerName = file.name.toLowerCase();
     if (!lowerName.endsWith('.mp3') && !lowerName.endsWith('.wav') && !lowerName.endsWith('.aac') && !lowerName.endsWith('.m4a')) {
       setError('Mohon unggah file audio format .mp3, .wav, .aac, atau .m4a.');
+      e.target.value = '';
       return;
     }
 
@@ -117,7 +118,7 @@ export default function RadioPlaylistManagerModal({ station, onClose }: RadioPla
           setError('Ukuran file MP3 terlalu besar (melebihi batas max upload).');
           return;
         }
-        setError(`Respon server error (${res.status} ${res.statusText}).`);
+        setError(`Respon server error (${res.status} ${res.statusText || 'Gagal Upload'}).`);
         return;
       }
 
@@ -133,6 +134,7 @@ export default function RadioPlaylistManagerModal({ station, onClose }: RadioPla
       setError(err?.message || 'Terjadi kesalahan saat mengunggah lagu.');
     } finally {
       setUploading(false);
+      e.target.value = '';
       setTimeout(() => setUploadProgress(0), 1000);
     }
   };

@@ -11,12 +11,15 @@ const LOCAL_RADIO_PLAYLIST_DIR = path.join(process.cwd(), 'public', 'radio-playl
 const DATA_DIR = path.join(process.cwd(), 'data');
 const BACKUP_FILE = path.join(DATA_DIR, 'radio_playlists.json');
 
+const isLinux = process.platform === 'linux';
+
 function queryPg(sql: string) {
+  if (!isLinux) return null; // PostgreSQL CLI script execution is only for Linux VPS
   try {
     const cmd = `sudo -u postgres psql -d rtmdb -t -A -c ${JSON.stringify(sql)}`;
-    const output = execSync(cmd, { encoding: 'utf-8' });
+    const output = execSync(cmd, { encoding: 'utf-8', timeout: 3000 });
     return output.trim();
-  } catch (err) {
+  } catch {
     return null;
   }
 }
@@ -171,17 +174,17 @@ export async function POST(request: Request) {
   try {
     const formData = await request.formData();
     const stationId = formData.get('stationId') as string;
-    const stationSlug = (formData.get('stationSlug') as string) || stationId || 'default';
+    const rawSlug = (formData.get('stationSlug') as string) || stationId || 'default';
     const file = formData.get('file') as File;
 
     if (!stationId || !file) {
-      return NextResponse.json({ success: false, error: 'stationId and file are required' }, { status: 400 });
+      return NextResponse.json({ success: false, error: 'Stasiun ID dan file lagu audio wajib diisi.' }, { status: 400 });
     }
 
     ensureTable();
 
-    const sanitizeSlug = stationSlug.toLowerCase().replace(/[^a-z0-9-]/g, '');
-    const isLinux = process.platform === 'linux';
+    const sanitizeSlug = rawSlug.toLowerCase().replace(/[^a-z0-9-]/g, '') || 'live';
+    
     const primaryDir = isLinux
       ? path.join(RADIO_PLAYLIST_BASE_DIR, sanitizeSlug)
       : path.join(LOCAL_RADIO_PLAYLIST_DIR, sanitizeSlug);
@@ -200,23 +203,32 @@ export async function POST(request: Request) {
     const buffer = Buffer.from(bytes);
 
     let filePath = primaryFilePath;
+    let writeSuccess = false;
+
     try {
       fs.writeFileSync(primaryFilePath, buffer);
+      writeSuccess = true;
     } catch (e) {
       console.warn('Could not write to primary playlist dir, using fallback:', e);
       filePath = fallbackFilePath;
     }
+
     try {
-      if (primaryFilePath !== fallbackFilePath) {
+      if (!writeSuccess || primaryFilePath !== fallbackFilePath) {
         fs.writeFileSync(fallbackFilePath, buffer);
+        writeSuccess = true;
       }
-    } catch {}
+    } catch (e) {
+      if (!writeSuccess) {
+        throw new Error(`Gagal menyimpan file audio ke server: ${String(e)}`);
+      }
+    }
 
     // Calculate audio duration with ffprobe if available
     let durationSeconds = 0;
     try {
       const probeCmd = `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${filePath}"`;
-      const durStr = execSync(probeCmd, { encoding: 'utf-8' }).trim();
+      const durStr = execSync(probeCmd, { encoding: 'utf-8', timeout: 3000 }).trim();
       durationSeconds = Math.round(parseFloat(durStr)) || 0;
     } catch {
       durationSeconds = 0;
@@ -225,7 +237,7 @@ export async function POST(request: Request) {
     const newItem = {
       id: `rpl-${timestamp}`,
       stationId,
-      stationSlug,
+      stationSlug: sanitizeSlug,
       filename: cleanFileName,
       filePath,
       playbackUrl,
@@ -239,7 +251,7 @@ export async function POST(request: Request) {
     backup.push(newItem);
     writeBackupFile(backup);
 
-    // 2. Save to PostgreSQL Database
+    // 2. Save to PostgreSQL Database if available
     try {
       const insertSql = `
         INSERT INTO radio_playlists (station_id, filename, file_path, playback_url, duration_seconds, sort_order)
@@ -261,9 +273,9 @@ export async function POST(request: Request) {
       success: true,
       item: newItem,
     });
-  } catch (err) {
+  } catch (err: any) {
     console.error('Error uploading radio playlist file:', err);
-    return NextResponse.json({ success: false, error: String(err) }, { status: 500 });
+    return NextResponse.json({ success: false, error: err?.message || String(err) }, { status: 500 });
   }
 }
 
