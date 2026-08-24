@@ -67,13 +67,18 @@ Dokumen ini memuat daftar spesifikasi teknis, arsitektur sistem, perbaikan bug, 
   - Mengganti tampilan nama file mentah (seperti `1787577596790-...`) dengan Nama Resmi Stasiun Radio (contoh: `RTM Radio`).
   - Menambahkan badge status **`● RADIO LIVE 24/7`** dan efek animasi visualizer audio canvas.
 
-### 5. Implementasi Real-Time Synchronized Broadcast 24/7 (Pseudolive Sync)
-* **Masalah**: Pada mode MP4 Playlist 24/7 (TV) dan MP3 Playlist 24/7 (Radio), setiap user yang membuka web memutar playlist dari detik 0 secara lokal, sehingga siaran tidak tersinkronisasi antar penonton/pendengar.
-* **Solusi**:
-  - Mengembangkan algoritma **Wall-Clock Unix Epoch Timestamp Synchronization**:
-    $$\text{Global Loop Offset} = (\text{Unix Timestamp in Seconds}) \pmod{\text{Total Playlist Duration}}$$
-  - Seluruh penonton dan pendengar di mana pun berada disinkronkan ke detik dan track yang **SAMA** secara akurat.
-  - Menambahkan mekanisme *auto-realign* otomatis setiap 10 detik untuk mengoreksi *buffering drift* pada browser client.
+### 5. Implementasi Server-Side Broadcasting & Real-Time Viewer Analytics
+* **Laporan Analitik Real-Time (100% Real Count)**:
+  - Mengubah seluruh data penonton pada Laporan Analitik Admin (`/admin/analytics`) menjadi **100% Real Count** tanpa angka acak/dummy.
+  - Data penonton live dihitung secara gabungan dari **MediaMTX Readers**, **Icecast Listeners**, dan **Active Web Session Heartbeats**.
+  - Total Views diakumulasi secara otomatis di database PostgreSQL `channels` & `radio_channels`.
+
+* **Perbaikan Stream Alignment Server-Side FFmpeg Looper (`rtmstream`)**:
+  - **Masalah**: Pada saat Admin memilih `MP4 Playlist 24/7`, player pada web publik sempat beralih ke *Replay Playback* karena service daemon daemon FFmpeg (`rtm-tv-smart-looper.py`) sebelumnya hanya mem-publish ke endpoint `live/tv`, sedangkan slug channel aktif pada database adalah `rtmstream` (`/live/rtmstream/index.m3u8`).
+  - **Solusi**:
+    1. Memperbarui script daemon `/usr/local/bin/rtm-tv-smart-looper.py` pada VPS agar secara otomatis mem-publish siaran ke **seluruh channel slug aktif** (`rtmstream` & `tv`).
+    2. Hasil stream `/live/rtmstream/index.m3u8` kini mengembalikan **HTTP 200 OK** (HLS Live Murni).
+    3. TV Player kini langsung memutar siaran HLS Live dari server dengan badge **`🔴 SIARAN LANGSUNG`** tanpa progress bar/seekbar dan tanpa beralih ke replay playback.
 
 ---
 
@@ -83,12 +88,12 @@ Dokumen ini memuat daftar spesifikasi teknis, arsitektur sistem, perbaikan bug, 
 | :-: | :--- | :--- | :--- | :-: |
 | 1 | **TV - Live Ingest OBS** | Start streaming dari OBS / vMix ke `rtmp://103.160.62.250:1935/live` (Stream Key: `rtmstream`). | TV Player otomatis beralih dari Replay ke Siaran Live OBS dalam 3-4 detik. | ✅ PASS |
 | 2 | **TV - Fallback Replay** | Stop streaming dari OBS / vMix. | TV Player otomatis beralih memutar rekaman siaran terbaru secara berulang. | ✅ PASS |
-| 3 | **TV - MP4 Playlist 24/7** | Di Admin, pilih Master Source `MP4 Playlist 24/7`. | Player memutar daftar video MP4 secara terisolasi tanpa terpengaruh sinyal OBS. | ✅ PASS |
-| 4 | **TV - Pseudolive Sync** | Buka halaman `https://rtm.tl/tv` dari 2 browser / device yang berbeda secara bersamaan. | Kedua device menampilkan adegan video dan detik siaran yang **sama persis**. | ✅ PASS |
+| 3 | **TV - MP4 Playlist 24/7** | Di Admin, pilih Master Source `MP4 Playlist 24/7`. | Player memutar siaran HLS Live 24/7 server-side (`/live/rtmstream/index.m3u8`) tanpa progress bar/seekbar. | ✅ PASS |
+| 4 | **TV - Pseudolive Sync** | Buka halaman `https://rtm.tl/tv` dari 2 browser / device yang berbeda secara bersamaan. | Kedua device menampilkan adegan video dan detik siaran HLS yang **sama persis**. | ✅ PASS |
 | 5 | **Radio - Mixxx/BUTT Live DJ** | Hubungkan Mixxx/BUTT ke Host `103.160.62.250:8000`, Mount `rtm-radio`, User `source`, Pass `RtmRadioLive2026!`. | Status Admin berubah `LIVE ON AIR` & audio siaran live dapat diputar jernih di web. | ✅ PASS |
 | 6 | **Radio - Kelola Playlist MP3** | Buka modal Kelola Playlist MP3 Radio, upload beberapa file `.mp3`. | Upload sukses (HTTP 200), file tersimpan di `/var/media/radio-playlists/` & masuk daftar. | ✅ PASS |
 | 7 | **Radio - MP3 Playlist 24/7** | Pilih Master Source `MP3 Playlist 24/7 (AutoDJ)` di Admin. | Pilihan tersimpan di PostgreSQL & player memutar rotasi lagu MP3 tanpa ter-reset. | ✅ PASS |
-| 8 | **Radio - UI/UX Clean** | Cek tampilan Radio Player di `https://rtm.tl/radio`. | Tidak ada progress bar statis, nama stasiun tampil bersih, visualizer equalizer aktif. | ✅ PASS |
+| 8 | **Laporan Analitik Penonton** | Buka halaman Admin Analytics (`/admin/analytics`). | Menampilkan statistik penonton real-time & total views 100% angka asli dari server. | ✅ PASS |
 | 9 | **Database Persistence** | Lakukan perubahan setting di Admin, lalu restart service PM2 (`pm2 restart rtm-web`). | Seluruh data channel, playlist, dan setting tetap tersimpan utuh di PostgreSQL. | ✅ PASS |
 
 ---
@@ -96,4 +101,5 @@ Dokumen ini memuat daftar spesifikasi teknis, arsitektur sistem, perbaikan bug, 
 ## 📌 5. Ringkasan Repositori Git
 * **Repository**: `https://github.com/hellyoshaqiqie17/rtm.git`
 * **Branch**: `main`
-* **Latest Commit**: `feat: implement wall-clock pseudolive 24/7 synchronization for TV & Radio playlists and fix radio activeSource`
+* **Latest Commit**: `c4f7972` (`feat: enforce server-side FFmpeg HLS/Icecast streaming for MP4 & MP3 24/7 playlists`)
+
