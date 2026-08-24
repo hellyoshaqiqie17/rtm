@@ -102,61 +102,20 @@ export default function RadioPlayer({ streamUrl: propStreamUrl }: RadioPlayerPro
     return () => clearInterval(pingInterval);
   }, [currentStation?.id]);
 
-  // Load Playlist or Icecast Live stream depending on station activeSource
+  // Load Server-Side Live Stream (Mixxx/BUTT Ingest or FFmpeg AutoDJ Playlist 24/7)
   useEffect(() => {
     if (!currentStation || !currentStation.id) return;
     const audio = audioRef.current;
     if (!audio) return;
 
-    if (currentStation.activeSource === 'playlist') {
-      setIsPlaylistMode(true);
-      const loadRadioPlaylist = async () => {
-        try {
-          const res = await fetch(`/api/radio/playlist?stationId=${currentStation.id}&stationSlug=${stationSlug}`);
-          if (res.ok) {
-            const data = await res.json();
-            if (data.items && data.items.length > 0) {
-              setPlaylistTracks(data.items);
-              const sync = getPlaylistRealtimeSync(data.items);
-              setCurrentTrackIdx(sync.trackIndex);
-              audio.src = data.items[sync.trackIndex].playbackUrl;
-
-              const handleMetadata = () => {
-                if (sync.seekTime > 0 && audio.duration && sync.seekTime < audio.duration) {
-                  audio.currentTime = sync.seekTime;
-                }
-                if (isPlaying) {
-                  audio.play().catch(console.error);
-                }
-                audio.removeEventListener('loadedmetadata', handleMetadata);
-              };
-
-              audio.addEventListener('loadedmetadata', handleMetadata);
-              if (audio.readyState >= 1) {
-                handleMetadata();
-              }
-              return;
-            }
-          }
-        } catch (err) {
-          console.error('Error fetching radio playlist in player:', err);
-        }
-        // Fallback to stream endpoint if playlist is empty or fails
-        if (audio.src !== streamEndpoint) {
-          audio.src = streamEndpoint;
-        }
-      };
-      loadRadioPlaylist();
-    } else {
-      setIsPlaylistMode(false);
-      if (audio.src !== streamEndpoint) {
-        audio.src = streamEndpoint;
-        if (isPlaying) {
-          audio.play().catch(console.error);
-        }
+    setIsPlaylistMode(currentStation.activeSource === 'playlist');
+    if (audio.src !== streamEndpoint) {
+      audio.src = streamEndpoint;
+      if (isPlaying) {
+        audio.play().catch(console.error);
       }
     }
-  }, [currentStation?.id, currentStation?.activeSource]);
+  }, [currentStation?.id, currentStation?.activeSource, streamEndpoint]);
 
   // Handle Track Ended for Radio Playlist 24/7 (AutoDJ Loop)
   const handleAudioEnded = () => {

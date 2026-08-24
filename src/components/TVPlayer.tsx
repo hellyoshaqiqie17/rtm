@@ -240,51 +240,16 @@ export default function TVPlayer({ channel: customChannel, streamUrl: propStream
     }
 
     // -------------------------------------------------------------
-    // MODE 1: MP4 PLAYLIST 24/7 (STRICT ISOLATION)
+    // MODE 1: LIVE INGEST OBS & SERVER-SIDE FFMPEG MP4 PLAYLIST 24/7 (HLS)
     // -------------------------------------------------------------
-    if (activeSource === 'playlist') {
-      setIsPlaylistMode(true);
-      setIsLiveBroadcasting(false);
-      isCurrentlyLiveRef.current = false;
-      const loadPlaylist = async () => {
-        try {
-          const res = await fetch(`/api/playlist?channelId=${currentChannel?.id || ''}&channelSlug=${currentChannel?.slug || ''}`);
-          if (res.ok) {
-            const data = await res.json();
-            if (data.items && data.items.length > 0) {
-              setPlaylistItems(data.items);
-              const sync = getPlaylistRealtimeSync(data.items);
-              setCurrentPlaylistIdx(sync.trackIndex);
-              setLoading(false);
-              setError(null);
-              video.src = data.items[sync.trackIndex].playbackUrl;
-
-              const handleMetadata = () => {
-                if (sync.seekTime > 0 && video.duration && sync.seekTime < video.duration) {
-                  video.currentTime = sync.seekTime;
-                }
-                video.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
-                video.removeEventListener('loadedmetadata', handleMetadata);
-              };
-
-              video.addEventListener('loadedmetadata', handleMetadata);
-              if (video.readyState >= 1) {
-                handleMetadata();
-              }
-              return;
-            } else {
-              setLoading(false);
-              setError('Belum ada video dalam MP4 Playlist untuk saluran ini.');
-              return;
-            }
-          }
-        } catch (err) {
-          console.error('Error loading MP4 playlist:', err);
-        }
-        setLoading(false);
-        setError('Gagal memuat MP4 Playlist.');
-      };
-      loadPlaylist();
+    if (activeSource === 'hls' || activeSource === 'playlist') {
+      setIsPlaylistMode(activeSource === 'playlist');
+      setIsLiveBroadcasting(true);
+      if (effectiveHlsUrl) {
+        startHlsLive(video, effectiveHlsUrl);
+      } else {
+        switchToReplayFallback(video);
+      }
       return;
     }
 
@@ -698,23 +663,23 @@ export default function TVPlayer({ channel: customChannel, streamUrl: propStream
             {/* NETFLIX-STYLE CONTROLS OVERLAY */}
             <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black via-black/80 to-transparent opacity-90 group-hover:opacity-100 transition-opacity z-20 space-y-2">
               
-              {/* PLAYBACK SEEK TIMELINE */}
-              <div className="w-full flex items-center gap-3 group/seekbar">
-                <input
-                  type="range"
-                  min={seekMin}
-                  max={seekMax > 0 ? seekMax : 100}
-                  step="0.5"
-                  value={currentTime}
-                  onChange={handleSeekChange}
-                  className="w-full h-1.5 group-hover/seekbar:h-2.5 accent-[#E50914] rounded-lg cursor-pointer transition-all bg-white/20"
-                />
-                {!isLiveBroadcasting && (
+              {/* PLAYBACK SEEK TIMELINE (Only for VOD Recording Replay mode) */}
+              {!isLiveBroadcasting && !isPlaylistMode && (
+                <div className="w-full flex items-center gap-3 group/seekbar">
+                  <input
+                    type="range"
+                    min={seekMin}
+                    max={seekMax > 0 ? seekMax : 100}
+                    step="0.5"
+                    value={currentTime}
+                    onChange={handleSeekChange}
+                    className="w-full h-1.5 group-hover/seekbar:h-2.5 accent-[#E50914] rounded-lg cursor-pointer transition-all bg-white/20"
+                  />
                   <span className="text-[11px] font-mono text-neutral-300 shrink-0">
                     {formatTime(currentTime)} / {formatTime(duration)}
                   </span>
-                )}
-              </div>
+                </div>
+              )}
 
               {/* CONTROLS ROW */}
               <div className="flex items-center justify-between gap-4">
