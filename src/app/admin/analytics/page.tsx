@@ -1,29 +1,65 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useStreamContext } from '@/context/StreamContext';
+
+interface ReportItem {
+  id: string;
+  title: string;
+  format: string;
+  currentViewers: number;
+  totalViews: number;
+  status: string;
+  type: string;
+}
 
 export default function AdminAnalyticsPage() {
   const { channels, radioChannels } = useStreamContext();
   const [timeRange, setTimeRange] = useState<'1h' | '24h' | '7d'>('24h');
+  const [analyticsData, setAnalyticsData] = useState<ReportItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Build 100% Real Dynamic Report List from Admin TV Channels & Radio Stations
-  const realReportData = [
-    ...channels.map((ch, idx) => ({
+  useEffect(() => {
+    const fetchAnalytics = async () => {
+      try {
+        const res = await fetch('/api/analytics', { cache: 'no-store' });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.report && Array.isArray(data.report)) {
+            setAnalyticsData(data.report);
+          }
+        }
+      } catch (err) {
+        console.error('Error fetching analytics report:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAnalytics();
+    const interval = setInterval(fetchAnalytics, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Fallback to local channel list if analytics fetch is loading
+  const reportData = analyticsData.length > 0 ? analyticsData : [
+    ...channels.map((ch) => ({
       id: ch.id,
       title: ch.name,
-      format: ch.activeSource === 'hls' ? 'HLS 1080p' : 'YOUTUBE EMBED',
-      currentViewers: Math.floor(Math.random() * 45) + 12,
-      totalViews: `${((idx + 1) * 3.4).toFixed(1)}K`,
-      status: 'LIVE',
+      format: ch.activeSource === 'playlist' ? 'MP4 PLAYLIST 24/7' : ch.activeSource === 'recording' ? 'REKAMAN VOD' : 'HLS 1080p',
+      currentViewers: 0,
+      totalViews: 0,
+      status: 'OFFLINE',
+      type: 'tv',
     })),
-    ...radioChannels.map((r, idx) => ({
+    ...radioChannels.map((r) => ({
       id: r.id,
       title: `${r.name} (Radio)`,
-      format: 'MP3 AUDIO',
-      currentViewers: Math.floor(Math.random() * 30) + 15,
-      totalViews: `${((idx + 1) * 2.8).toFixed(1)}K`,
-      status: 'LIVE',
+      format: r.activeSource === 'playlist' ? 'AUTODJ MP3 24/7' : 'MP3 AUDIO LIVE',
+      currentViewers: 0,
+      totalViews: 0,
+      status: 'OFFLINE',
+      type: 'radio',
     })),
   ];
 
@@ -37,7 +73,7 @@ export default function AdminAnalyticsPage() {
             Laporan Analitik Penonton
           </h1>
           <p className="text-xs text-neutral-400 mt-1">
-            Statistik penonton real-time dan pemutaran aktif saluran TV & Radio RTM MAUBERE.
+            Statistik penonton real-time dan pemutaran aktif saluran TV & Radio RTM MAUBERE (100% Real Count).
           </p>
         </div>
 
@@ -84,7 +120,7 @@ export default function AdminAnalyticsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
-              {realReportData.map((row) => (
+              {reportData.map((row) => (
                 <tr key={row.id} className="hover:bg-white/5 transition-colors">
                   <td className="py-4 px-6 font-bold text-white">
                     {row.title}
@@ -95,8 +131,12 @@ export default function AdminAnalyticsPage() {
                     </span>
                   </td>
                   <td className="py-4 px-6 font-mono">
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-500/30">
-                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                      row.status === 'LIVE'
+                        ? 'bg-emerald-950 text-emerald-400 border border-emerald-500/30'
+                        : 'bg-neutral-900 text-neutral-400 border border-neutral-800'
+                    }`}>
+                      <span className={`w-2 h-2 rounded-full ${row.status === 'LIVE' ? 'bg-emerald-400 animate-pulse' : 'bg-neutral-500'}`}></span>
                       <span>{row.status}</span>
                     </span>
                   </td>
@@ -104,7 +144,7 @@ export default function AdminAnalyticsPage() {
                     {row.currentViewers} Penonton
                   </td>
                   <td className="py-4 px-6 text-right font-mono font-bold text-white text-sm">
-                    {row.totalViews}
+                    {row.totalViews.toLocaleString()}
                   </td>
                 </tr>
               ))}

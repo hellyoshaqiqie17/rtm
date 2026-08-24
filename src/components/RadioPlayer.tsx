@@ -77,6 +77,31 @@ export default function RadioPlayer({ streamUrl: propStreamUrl }: RadioPlayerPro
 
   const streamEndpoint = propStreamUrl || currentStation?.streamUrl || 'https://radio.rtm.tl/live';
 
+  // Real Analytics: Record View & Send Viewer Heartbeat Ping
+  useEffect(() => {
+    if (!currentStation || !currentStation.id) return;
+    const channelId = currentStation.id;
+    const sessionId = `radio-${Math.random().toString(36).substring(2, 10)}`;
+
+    // Record view increment once on mount
+    fetch('/api/analytics', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channelId, sessionId, streamType: 'radio', type: 'view' }),
+    }).catch(() => {});
+
+    // Send heartbeat ping every 15s to keep active viewer count accurate
+    const pingInterval = setInterval(() => {
+      fetch('/api/analytics', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channelId, sessionId, streamType: 'radio', type: 'ping' }),
+      }).catch(() => {});
+    }, 15000);
+
+    return () => clearInterval(pingInterval);
+  }, [currentStation?.id]);
+
   // Load Playlist or Icecast Live stream depending on station activeSource
   useEffect(() => {
     if (!currentStation || !currentStation.id) return;

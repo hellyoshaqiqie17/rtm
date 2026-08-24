@@ -95,6 +95,31 @@ export default function TVPlayer({ channel: customChannel, streamUrl: propStream
     ? `${cdnBaseUrl}/${currentChannel.slug}/index.m3u8`
     : baseHlsUrl;
 
+  // Real Analytics: Record View & Send Viewer Heartbeat Ping
+  useEffect(() => {
+    if (!currentChannel || !currentChannel.id) return;
+    const channelId = currentChannel.id;
+    const sessionId = `tv-${Math.random().toString(36).substring(2, 10)}`;
+
+    // Record view increment once on mount
+    fetch('/api/analytics', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channelId, sessionId, streamType: 'tv', type: 'view' }),
+    }).catch(() => {});
+
+    // Send heartbeat ping every 15s to keep active viewer count accurate
+    const pingInterval = setInterval(() => {
+      fetch('/api/analytics', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channelId, sessionId, streamType: 'tv', type: 'ping' }),
+      }).catch(() => {});
+    }, 15000);
+
+    return () => clearInterval(pingInterval);
+  }, [currentChannel?.id]);
+
   // Check past recordings for channel if live stream fails
   const fetchRecordedVideo = async () => {
     try {
