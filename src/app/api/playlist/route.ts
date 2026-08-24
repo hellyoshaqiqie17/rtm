@@ -245,7 +245,7 @@ export async function POST(request: Request) {
     // 3. Rebuild FFmpeg autoloop playlist on Linux VPS
     if (isLinux) {
       try {
-        execSync(`python3 /usr/local/bin/rtm-autoloop.py --rebuild '${sanitizeSlug}'`, { encoding: 'utf-8' });
+        execSync(`python3 /usr/local/bin/rtm-rebuild-playlists.py '${sanitizeSlug}'`, { encoding: 'utf-8' });
       } catch (err) {
         console.warn('Autoloop rebuild trigger warning:', err);
       }
@@ -332,9 +332,9 @@ export async function DELETE(request: Request) {
     } catch {}
 
     // 4. Rebuild FFmpeg autoloop playlist if on Linux
-    if (process.platform === 'linux' && channelSlug) {
+    if (process.platform === 'linux') {
       try {
-        execSync(`python3 /usr/local/bin/rtm-autoloop.py --rebuild '${channelSlug}'`, { encoding: 'utf-8' });
+        execSync(`python3 /usr/local/bin/rtm-rebuild-playlists.py '${channelSlug}'`, { encoding: 'utf-8' });
       } catch {}
     }
 
