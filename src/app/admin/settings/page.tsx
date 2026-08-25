@@ -45,6 +45,20 @@ export default function AdminSettingsPage() {
 
   const [savedSuccess, setSavedSuccess] = useState(false);
 
+  React.useEffect(() => {
+    if (siteSettings) {
+      if (siteSettings.siteName !== undefined) setSiteName(siteSettings.siteName);
+      if (siteSettings.seoDescription !== undefined) setSeoDescription(siteSettings.seoDescription);
+      if (siteSettings.defaultThumbnail !== undefined) setDefaultThumbnail(siteSettings.defaultThumbnail);
+      if (siteSettings.youtubeApiKey !== undefined) setApiKey(siteSettings.youtubeApiKey);
+      if (siteSettings.youtubeChannelUrl !== undefined) setChannelTargetUrl(siteSettings.youtubeChannelUrl);
+      if (siteSettings.termsContent !== undefined) setTermsContent(siteSettings.termsContent);
+      if (siteSettings.privacyContent !== undefined) setPrivacyContent(siteSettings.privacyContent);
+      if (siteSettings.helpContent !== undefined) setHelpContent(siteSettings.helpContent);
+      if (siteSettings.footerText !== undefined) setFooterText(siteSettings.footerText);
+    }
+  }, [siteSettings]);
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {

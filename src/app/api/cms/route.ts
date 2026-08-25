@@ -63,6 +63,10 @@ function getFromPostgres() {
       `SELECT json_agg(name) FROM categories;`
     );
 
+    const categoryObjectsRaw = queryPg(
+      `SELECT json_agg(json_build_object('id', COALESCE(id::text, name), 'name', name, 'image', COALESCE(image, ''))) FROM categories;`
+    );
+
     const schedulesRaw = queryPg(
       `SELECT json_agg(json_build_object(
         'id', id, 'type', type, 'channelId', channel_id, 'title', title,
@@ -73,17 +77,25 @@ function getFromPostgres() {
 
     const logoRaw = queryPg(`SELECT value FROM site_settings WHERE key = 'site_logo';`);
 
+    const siteSettingsRaw = queryPg(
+      `SELECT json_object_agg(key, value) FROM site_settings WHERE key != 'site_logo';`
+    );
+
     const channels = channelsRaw && channelsRaw !== '' ? JSON.parse(channelsRaw) : null;
     const radioChannels = radioRaw && radioRaw !== '' ? JSON.parse(radioRaw) : null;
     const categories = categoriesRaw && categoriesRaw !== '' ? JSON.parse(categoriesRaw) : null;
+    const categoryObjects = categoryObjectsRaw && categoryObjectsRaw !== '' ? JSON.parse(categoryObjectsRaw) : null;
     const schedules = schedulesRaw && schedulesRaw !== '' ? JSON.parse(schedulesRaw) : null;
+    const siteSettings = siteSettingsRaw && siteSettingsRaw !== '' ? JSON.parse(siteSettingsRaw) : null;
 
     return {
       channels: Array.isArray(channels) ? channels : [],
       radioChannels: Array.isArray(radioChannels) ? radioChannels : [],
       categories: Array.isArray(categories) ? categories : [],
+      categoryObjects: Array.isArray(categoryObjects) ? categoryObjects : [],
       schedules: Array.isArray(schedules) ? schedules : [],
       siteLogo: logoRaw || 'https://i.ibb.co.com/tT9zRDqv/RTM-LOGO-Jadi.png',
+      siteSettings: siteSettings && typeof siteSettings === 'object' ? siteSettings : {},
     };
   } catch (err) {
     console.error('Error fetching from PostgreSQL:', err);
@@ -102,11 +114,21 @@ function sqlVal(val: any): string {
 // Save CMS data to PostgreSQL rtmdb database
 function saveToPostgres(data: any) {
   try {
-    // 1. Sync Categories
-    if (Array.isArray(data.categories)) {
+    // 1. Sync Categories & Category Objects
+    queryPg(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS image TEXT DEFAULT '';`);
+    queryPg(`ALTER TABLE categories ADD COLUMN IF NOT EXISTS id TEXT;`);
+
+    if (Array.isArray(data.categoryObjects)) {
+      queryPg(`DELETE FROM categories;`);
+      for (const cat of data.categoryObjects) {
+        queryPg(`INSERT INTO categories (id, name, image) VALUES (${sqlVal(cat.id || cat.name)}, ${sqlVal(cat.name)}, ${sqlVal(cat.image || '')});`);
+      }
+    } else if (Array.isArray(data.categories)) {
       queryPg(`DELETE FROM categories;`);
       for (const cat of data.categories) {
-        queryPg(`INSERT INTO categories (name) VALUES (${sqlVal(cat)});`);
+        const catName = typeof cat === 'string' ? cat : cat.name;
+        const catImg = typeof cat === 'object' ? cat.image || '' : '';
+        queryPg(`INSERT INTO categories (id, name, image) VALUES (${sqlVal(catName)}, ${sqlVal(catName)}, ${sqlVal(catImg)});`);
       }
     }
 
@@ -211,6 +233,16 @@ function saveToPostgres(data: any) {
     // 5. Sync Site Logo
     if (data.siteLogo) {
       queryPg(`INSERT INTO site_settings (key, value) VALUES ('site_logo', ${sqlVal(data.siteLogo)}) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;`);
+    }
+
+    // 6. Sync Site Settings (SEO, YouTube, Footer, Static Pages)
+    if (data.siteSettings && typeof data.siteSettings === 'object') {
+      queryPg(`CREATE TABLE IF NOT EXISTS site_settings (key TEXT PRIMARY KEY, value TEXT);`);
+      for (const [key, val] of Object.entries(data.siteSettings)) {
+        if (val !== undefined && val !== null) {
+          queryPg(`INSERT INTO site_settings (key, value) VALUES (${sqlVal(key)}, ${sqlVal(val)}) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;`);
+        }
+      }
     }
 
     return true;

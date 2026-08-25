@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
-import { useStreamContext } from '@/context/StreamContext';
-import { Layers, Plus, Search, Trash2, X, AlertTriangle } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { useStreamContext, CategoryItem } from '@/context/StreamContext';
+import { Layers, Plus, Search, Trash2, X, AlertTriangle, Edit, Upload, Image as ImageIcon } from 'lucide-react';
 
 const categoryBgs: Record<string, string> = {
   'TV On Demand': 'https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=500&auto=format&fit=crop&q=80',
@@ -13,28 +13,71 @@ const categoryBgs: Record<string, string> = {
   'RTM Maubere': 'https://images.unsplash.com/photo-1594909122845-11baa439b7bf?w=500&auto=format&fit=crop&q=80',
 };
 
+const DEFAULT_CAT_BG = 'https://images.unsplash.com/photo-1594909122845-11baa439b7bf?w=500&auto=format&fit=crop&q=80';
+
 export default function AdminCategoryPage() {
-  const { categories, addCategory, deleteCategory, channels } = useStreamContext();
+  const { categories, categoryObjects, addCategory, updateCategory, deleteCategory, channels } = useStreamContext();
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<CategoryItem | null>(null);
   const [deleteConfirmCategory, setDeleteConfirmCategory] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  
+  // Form State
   const [name, setName] = useState('');
+  const [image, setImage] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleCreate = (e: React.FormEvent) => {
+  const openAddModal = () => {
+    setEditingCategory(null);
+    setName('');
+    setImage('');
+    setIsModalOpen(true);
+  };
+
+  const openEditModal = (catObj: CategoryItem) => {
+    setEditingCategory(catObj);
+    setName(catObj.name);
+    setImage(catObj.image || '');
+    setIsModalOpen(true);
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setImage(event.target.result as string);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
-    addCategory(name.trim());
+
+    if (editingCategory) {
+      updateCategory(editingCategory.name, name.trim(), image.trim());
+    } else {
+      addCategory(name.trim(), image.trim());
+    }
+
     setName('');
+    setImage('');
+    setEditingCategory(null);
     setIsModalOpen(false);
   };
 
-  const filtered = categories.filter(cat =>
-    cat.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredObjects = (categoryObjects && categoryObjects.length > 0
+    ? categoryObjects
+    : categories.map(c => ({ id: c, name: c, image: '' }))
+  ).filter(cat => cat.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
-    <div className="space-y-6 font-sans">
+    <div className="space-y-6 font-sans selection:bg-[#E50914] selection:text-white">
       
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/5 pb-5">
@@ -43,12 +86,12 @@ export default function AdminCategoryPage() {
             <Layers className="w-6 h-6 text-[#E50914]" /> Kelola Kategori Siaran
           </h1>
           <p className="text-xs text-neutral-400 mt-1">
-            Tambah dan hapus kategori program siaran TV & Radio RTM MAUBERE secara permanen.
+            Tambah, edit nama & upload gambar kustom untuk kategori program siaran TV & Radio RTM MAUBERE.
           </p>
         </div>
 
         <button
-          onClick={() => setIsModalOpen(true)}
+          onClick={openAddModal}
           className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#E50914] text-white hover:bg-red-700 text-xs font-bold shadow-lg shadow-red-900/40 transition-all active:scale-95 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
@@ -70,14 +113,15 @@ export default function AdminCategoryPage() {
 
       {/* Category Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 font-sans">
-        {filtered.map((catName, idx) => {
+        {filteredObjects.map((catObj, idx) => {
+          const catName = catObj.name;
           const count = channels.filter((c) => (c.category || 'TV On Demand') === catName).length;
-          const bg = categoryBgs[catName] || 'https://images.unsplash.com/photo-1594909122845-11baa439b7bf?w=500&auto=format&fit=crop&q=80';
+          const bg = catObj.image || categoryBgs[catName] || DEFAULT_CAT_BG;
           const slug = catName.toLowerCase().trim().replace(/\s+/g, '-');
 
           return (
             <div key={idx} className="bg-[#121212] rounded-2xl border border-white/5 overflow-hidden group shadow-xl relative">
-              <div className="relative h-32 w-full overflow-hidden bg-black">
+              <div className="relative h-36 w-full overflow-hidden bg-black">
                 <img
                   src={bg}
                   alt={catName}
@@ -86,7 +130,7 @@ export default function AdminCategoryPage() {
                 <div className="absolute inset-0 bg-gradient-to-t from-[#121212] via-transparent to-transparent"></div>
                 
                 <div className="absolute bottom-3 left-4 right-4">
-                  <span className="font-extrabold text-white text-base block">{catName}</span>
+                  <span className="font-extrabold text-white text-base block drop-shadow-md">{catName}</span>
                   <span className="text-[11px] text-neutral-400 font-mono block">/{slug}</span>
                 </div>
               </div>
@@ -95,36 +139,49 @@ export default function AdminCategoryPage() {
                 <span className="text-xs font-mono font-bold text-[#E50914]">
                   {count} {count === 1 ? 'Channel Live' : 'Channels Live'}
                 </span>
-                <button
-                  onClick={() => setDeleteConfirmCategory(catName)}
-                  className="p-2 rounded-lg bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white transition-all border border-red-500/20 cursor-pointer"
-                  title="Hapus Kategori"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => openEditModal(catObj)}
+                    className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-neutral-300 hover:text-white transition-all border border-white/10 cursor-pointer"
+                    title="Edit Kategori"
+                  >
+                    <Edit className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => setDeleteConfirmCategory(catName)}
+                    className="p-2 rounded-lg bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white transition-all border border-red-500/20 cursor-pointer"
+                    title="Hapus Kategori"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* ADD CATEGORY MODAL */}
+      {/* ADD / EDIT CATEGORY MODAL */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50">
           <div className="bg-[#121212] rounded-2xl p-6 max-w-md w-full border border-white/10 shadow-2xl space-y-4 font-sans">
             
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <h3 className="font-bold text-white text-base flex items-center gap-2">
-                <Layers className="w-4 h-4 text-[#E50914]" /> Tambah Kategori Baru
+                <Layers className="w-4 h-4 text-[#E50914]" />
+                {editingCategory ? 'Edit Kategori Siaran' : 'Tambah Kategori Baru'}
               </h3>
               <button onClick={() => setIsModalOpen(false)} className="p-1 rounded-lg text-neutral-400 hover:text-white cursor-pointer">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleCreate} className="space-y-4 text-xs font-sans">
+            <form onSubmit={handleSubmit} className="space-y-4 text-xs font-sans">
+              
+              {/* Category Name */}
               <div>
-                <label className="block font-semibold text-neutral-300 mb-1">Nama Kategori Baru</label>
+                <label className="block font-semibold text-neutral-300 mb-1">Nama Kategori</label>
                 <input
                   type="text"
                   required
@@ -135,6 +192,53 @@ export default function AdminCategoryPage() {
                 />
               </div>
 
+              {/* Category Image Upload / URL */}
+              <div className="space-y-2">
+                <label className="block font-semibold text-neutral-300 mb-1">
+                  Gambar Kategori / Thumbnail
+                </label>
+
+                {/* Preview Box */}
+                <div className="relative aspect-video w-full rounded-xl overflow-hidden bg-black border border-white/10 flex items-center justify-center group">
+                  <img
+                    src={image || categoryBgs[name] || DEFAULT_CAT_BG}
+                    alt="Preview Kategori"
+                    className="w-full h-full object-cover opacity-80"
+                  />
+                  <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center gap-2 opacity-90 group-hover:opacity-100 transition-opacity">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="px-3 py-1.5 rounded-lg bg-[#E50914] text-white font-bold text-xs hover:bg-red-700 transition-all flex items-center gap-1.5 shadow-lg cursor-pointer"
+                    >
+                      <Upload className="w-3.5 h-3.5" /> Upload File Gambar
+                    </button>
+                    <span className="text-[10px] text-neutral-300 font-mono">PNG, JPG, WebP (Max 5MB)</span>
+                  </div>
+                </div>
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+
+                {/* Direct Image URL input */}
+                <div>
+                  <span className="text-[10px] text-neutral-400 font-mono block mb-1">Atau masukkan URL Gambar Kustom:</span>
+                  <input
+                    type="text"
+                    placeholder="https://images.unsplash.com/photo-..."
+                    value={image}
+                    onChange={(e) => setImage(e.target.value)}
+                    className="w-full p-2.5 bg-black/60 border border-white/10 rounded-xl text-white font-mono text-[11px] focus:border-[#E50914] focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Modal Actions */}
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-white/10">
                 <button
                   type="button"
@@ -147,7 +251,7 @@ export default function AdminCategoryPage() {
                   type="submit"
                   className="px-5 py-2 rounded-xl bg-[#E50914] text-white hover:bg-red-700 font-bold shadow-lg shadow-red-900/30 cursor-pointer"
                 >
-                  Simpan Kategori
+                  {editingCategory ? 'Simpan Perubahan' : 'Simpan Kategori'}
                 </button>
               </div>
 

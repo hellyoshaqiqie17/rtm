@@ -76,6 +76,12 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   helpContent: '',
 };
 
+export interface CategoryItem {
+  id: string;
+  name: string;
+  image?: string;
+}
+
 export interface AdminUser {
   username: string;
   role: string;
@@ -95,7 +101,9 @@ interface StreamContextType {
 
   // Categories State
   categories: string[];
-  addCategory: (categoryName: string) => void;
+  categoryObjects: CategoryItem[];
+  addCategory: (categoryName: string, image?: string) => void;
+  updateCategory: (oldCategoryName: string, newCategoryName: string, image?: string) => void;
   deleteCategory: (categoryName: string) => void;
 
   // Program Schedules State (100% Admin Dynamic)
@@ -170,6 +178,7 @@ export function StreamProvider({ children }: { children: React.ReactNode }) {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [activeChannelId, setActiveChannelId] = useState<string>('');
   const [categories, setCategories] = useState<string[]>([]);
+  const [categoryObjects, setCategoryObjects] = useState<CategoryItem[]>([]);
   const [schedules, setSchedules] = useState<ScheduleItem[]>([]);
   
   // Radio State
@@ -221,9 +230,11 @@ export function StreamProvider({ children }: { children: React.ReactNode }) {
     channels?: Channel[];
     radioChannels?: RadioChannel[];
     categories?: string[];
+    categoryObjects?: CategoryItem[];
     schedules?: ScheduleItem[];
     shorts?: ShortItem[];
     siteLogo?: string;
+    siteSettings?: Partial<SiteSettings>;
   }) => {
     try {
       await fetch('/api/cms', {
@@ -265,8 +276,16 @@ export function StreamProvider({ children }: { children: React.ReactNode }) {
           if (data?.radioChannels && Array.isArray(data.radioChannels)) {
             setRadioChannels(data.radioChannels);
           }
-          if (data?.categories && Array.isArray(data.categories)) {
-            setCategories(data.categories);
+          if (data?.categoryObjects && Array.isArray(data.categoryObjects)) {
+            setCategoryObjects(data.categoryObjects);
+            setCategories(data.categoryObjects.map((c: any) => typeof c === 'string' ? c : c.name));
+          } else if (data?.categories && Array.isArray(data.categories)) {
+            const objs: CategoryItem[] = data.categories.map((c: any) => {
+              if (typeof c === 'string') return { id: c, name: c, image: '' };
+              return { id: c.id || c.name, name: c.name || '', image: c.image || '' };
+            });
+            setCategoryObjects(objs);
+            setCategories(objs.map(o => o.name));
           }
           if (data?.schedules && Array.isArray(data.schedules)) {
             setSchedules(data.schedules);
@@ -315,9 +334,11 @@ export function StreamProvider({ children }: { children: React.ReactNode }) {
     syncToServerCms({ channels: newChannels });
   };
 
-  const saveCategoriesState = (newCategories: string[]) => {
-    setCategories(newCategories);
-    syncToServerCms({ categories: newCategories });
+  const saveCategoriesState = (newObjs: CategoryItem[]) => {
+    setCategoryObjects(newObjs);
+    const names = newObjs.map(o => o.name);
+    setCategories(names);
+    syncToServerCms({ categories: names, categoryObjects: newObjs });
   };
 
   const saveSchedulesState = (newSchedules: ScheduleItem[]) => {
@@ -368,14 +389,29 @@ export function StreamProvider({ children }: { children: React.ReactNode }) {
     saveChannelsState(next);
   };
 
-  const addCategory = (categoryName: string) => {
-    if (!categoryName || categories.includes(categoryName)) return;
-    const next = [...categories, categoryName];
+  const addCategory = (categoryName: string, image?: string) => {
+    if (!categoryName || categoryObjects.some(c => c.name.toLowerCase() === categoryName.toLowerCase())) return;
+    const id = `cat-${Date.now()}`;
+    const newObj: CategoryItem = { id, name: categoryName.trim(), image: image || '' };
+    saveCategoriesState([...categoryObjects, newObj]);
+  };
+
+  const updateCategory = (oldCategoryName: string, newCategoryName: string, image?: string) => {
+    const next = categoryObjects.map(c => {
+      if (c.name.toLowerCase() === oldCategoryName.toLowerCase()) {
+        return {
+          ...c,
+          name: newCategoryName.trim(),
+          image: image !== undefined ? image : c.image || '',
+        };
+      }
+      return c;
+    });
     saveCategoriesState(next);
   };
 
   const deleteCategory = (categoryName: string) => {
-    const next = categories.filter((c) => c !== categoryName);
+    const next = categoryObjects.filter((c) => c.name.toLowerCase() !== categoryName.toLowerCase());
     saveCategoriesState(next);
   };
 
@@ -500,7 +536,9 @@ export function StreamProvider({ children }: { children: React.ReactNode }) {
         deleteChannel,
         toggleChannelSource,
         categories,
+        categoryObjects,
         addCategory,
+        updateCategory,
         deleteCategory,
         schedules,
         addSchedule,
