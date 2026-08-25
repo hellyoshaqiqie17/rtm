@@ -210,7 +210,12 @@ export default function RadioPlayer({ streamUrl: propStreamUrl }: RadioPlayerPro
     } else {
       setLoading(true);
       setError(null);
+      
+      const baseUrl = streamEndpoint.split('?')[0];
+      const freshUrl = `${baseUrl}?t=${Date.now()}`;
+      audio.src = freshUrl;
       audio.load();
+      
       audio.play()
         .then(() => {
           setIsPlaying(true);
@@ -272,6 +277,17 @@ export default function RadioPlayer({ streamUrl: propStreamUrl }: RadioPlayerPro
       <audio
         ref={audioRef}
         preload="none"
+        onWaiting={() => setLoading(true)}
+        onPlaying={() => {
+          setLoading(false);
+          setIsPlaying(true);
+          setError(null);
+        }}
+        onStalled={() => {
+          if (isPlaying && audioRef.current) {
+            audioRef.current.play().catch(() => {});
+          }
+        }}
         onEnded={handleAudioEnded}
         onTimeUpdate={() => {
           if (audioRef.current) setCurrentTime(audioRef.current.currentTime);
@@ -281,7 +297,16 @@ export default function RadioPlayer({ streamUrl: propStreamUrl }: RadioPlayerPro
         }}
         onError={() => {
           setLoading(false);
-          setIsPlaying(false);
+          if (isPlaying) {
+            setError('Menghubungkan ulang ke siaran radio...');
+            setTimeout(() => {
+              if (audioRef.current) {
+                const freshUrl = `${streamEndpoint.split('?')[0]}?t=${Date.now()}`;
+                audioRef.current.src = freshUrl;
+                audioRef.current.play().catch(() => {});
+              }
+            }, 2000);
+          }
         }}
       />
 
