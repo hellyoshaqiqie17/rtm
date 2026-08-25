@@ -119,15 +119,86 @@ export async function GET(req: Request) {
 
     let finalRecordings = Array.from(combinedMap.values());
 
-    // 4. Universal Fallback: If no recordings found for specific slug, return ALL recordings in system!
-    if (finalRecordings.length === 0) {
-      const allDiskRecordings = scanDiskRecordings();
-      finalRecordings = allDiskRecordings;
+    // NOTE: Removed universal fallback to prevent new channels from inheriting recordings from other channels!
+    if (slug || channelId) {
+      finalRecordings = finalRecordings.filter(rec => rec.streamKey === slug || rec.channelId === channelId || rec.filename.startsWith(`${slug}_`));
     }
 
     return NextResponse.json({ success: true, recordings: finalRecordings }, {
       headers: { 'Cache-Control': 'no-store, max-age=0' },
     });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: Request) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const filename = searchParams.get('filename');
+    const recordingId = searchParams.get('id');
+
+    if (!filename && !recordingId) {
+      return NextResponse.json({ success: false, error: 'Filename or recording ID required' }, { status: 400 });
+    }
+
+    const targetFilename = filename || '';
+
+    // 1. Delete physical files from disk
+    const dirsToClean = [RECORDINGS_BASE_DIR, LOCAL_RECORDINGS_DIR];
+    for (const dir of dirsToClean) {
+      if (targetFilename) {
+        const fp = path.join(dir, targetFilename);
+        if (fs.existsSync(fp)) {
+          try {
+            fs.unlinkSync(fp);
+            console.log('[RECORDINGS DELETE] Unlinked file:', fp);
+          } catch (e) {
+            console.error('Failed to unlink file:', fp, e);
+          }
+        }
+      }
+    }
+
+    // 2. Delete DB record
+    if (targetFilename) {
+      queryPg(`DELETE FROM recordings WHERE filename = ${JSON.stringify(targetFilename)};`);
+    }
+    if (recordingId) {
+      queryPg(`DELETE FROM recordings WHERE id = ${JSON.stringify(recordingId)};`);
+    }
+
+    // 3. Clear selected/recordedPlaybackUrl in channels if it matches
+    const playbackUrl = `/recordings/${targetFilename}`;
+    queryPg(`UPDATE channels SET selected_recording_url = '' WHERE selected_recording_url = ${JSON.stringify(playbackUrl)};`);
+    queryPg(`UPDATE channels SET recorded_playback_url = '' WHERE recorded_playback_url = ${JSON.stringify(playbackUrl)};`);
+
+    // 4. Update cms.json if exists
+    try {
+      const cmsPath = path.join(process.cwd(), 'data', 'cms.json');
+      if (fs.existsSync(cmsPath)) {
+        const data = JSON.parse(fs.readFileSync(cmsPath, 'utf-8'));
+        let modified = false;
+        if (Array.isArray(data.channels)) {
+          for (const c of data.channels) {
+            if (c.selectedRecordingUrl === playbackUrl) {
+              c.selectedRecordingUrl = '';
+              modified = true;
+            }
+            if (c.recordedPlaybackUrl === playbackUrl) {
+              c.recordedPlaybackUrl = '';
+              modified = true;
+            }
+          }
+        }
+        if (modified) {
+          fs.writeFileSync(cmsPath, JSON.stringify(data, null, 2), 'utf-8');
+        }
+      }
+    } catch (e) {}
+
+    return NextResponse.json({ success: true, message: 'File rekaman berhasil dihapus.' });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return NextResponse.json({ success: false, error: message }, { status: 500 });
