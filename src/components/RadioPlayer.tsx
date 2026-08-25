@@ -109,67 +109,23 @@ export default function RadioPlayer({ streamUrl: propStreamUrl }: RadioPlayerPro
     if (!audio) return;
 
     setIsPlaylistMode(currentStation.activeSource === 'playlist');
-    if (audio.src !== streamEndpoint) {
-      audio.src = streamEndpoint;
+
+    // Build canonical server-side stream URL
+    const targetUrl = streamEndpoint.startsWith('http') || streamEndpoint.startsWith('/radio')
+      ? streamEndpoint
+      : `/radio/${stationSlug}`;
+
+    if (audio.src !== targetUrl) {
+      audio.src = targetUrl;
       if (isPlaying) {
         audio.play().catch(console.error);
       }
     }
-  }, [currentStation?.id, currentStation?.activeSource, streamEndpoint]);
+  }, [currentStation?.id, currentStation?.activeSource, streamEndpoint, stationSlug]);
 
-  // Handle Track Ended for Radio Playlist 24/7 (AutoDJ Loop)
   const handleAudioEnded = () => {
-    if (isPlaylistMode && playlistTracks.length > 0) {
-      const sync = getPlaylistRealtimeSync(playlistTracks);
-      setCurrentTrackIdx(sync.trackIndex);
-      const audio = audioRef.current;
-      if (audio && playlistTracks[sync.trackIndex]) {
-        audio.src = playlistTracks[sync.trackIndex].playbackUrl;
-        const handleMetadata = () => {
-          if (sync.seekTime > 0 && audio.duration && sync.seekTime < audio.duration) {
-            audio.currentTime = sync.seekTime;
-          }
-          audio.play().then(() => setIsPlaying(true)).catch(console.error);
-          audio.removeEventListener('loadedmetadata', handleMetadata);
-        };
-        audio.addEventListener('loadedmetadata', handleMetadata);
-        if (audio.readyState >= 1) {
-          handleMetadata();
-        }
-      }
-    } else {
-      setIsPlaying(false);
-    }
+    setIsPlaying(false);
   };
-
-  // Periodic Wall-Clock Pseudolive Synchronization for 24/7 Radio MP3 Playlist
-  useEffect(() => {
-    if (!isPlaylistMode || !playlistTracks.length) return;
-    const interval = setInterval(() => {
-      const audio = audioRef.current;
-      if (!audio) return;
-
-      const sync = getPlaylistRealtimeSync(playlistTracks);
-      if (sync.trackIndex !== currentTrackIdx) {
-        setCurrentTrackIdx(sync.trackIndex);
-        audio.src = playlistTracks[sync.trackIndex].playbackUrl;
-        const handleMetadata = () => {
-          if (sync.seekTime > 0 && audio.duration && sync.seekTime < audio.duration) {
-            audio.currentTime = sync.seekTime;
-          }
-          if (isPlaying) audio.play().catch(console.error);
-          audio.removeEventListener('loadedmetadata', handleMetadata);
-        };
-        audio.addEventListener('loadedmetadata', handleMetadata);
-      } else if (isPlaying && Math.abs(audio.currentTime - sync.seekTime) > 5) {
-        if (audio.duration && sync.seekTime < audio.duration) {
-          audio.currentTime = sync.seekTime;
-        }
-      }
-    }, 10000);
-
-    return () => clearInterval(interval);
-  }, [isPlaylistMode, playlistTracks, currentTrackIdx, isPlaying]);
 
   const handleNextTrack = () => {
     if (!playlistTracks.length) return;

@@ -269,6 +269,11 @@ export async function POST(request: Request) {
       console.warn('PostgreSQL insert warning for radio playlist:', e);
     }
 
+    // Trigger dynamic server-side radio playlist rebuild on VPS
+    try {
+      execSync(`python3 /usr/local/bin/rtm-rebuild-radio-playlists.py ${sanitizeSlug}`, { encoding: 'utf-8', timeout: 4000 });
+    } catch (e) {}
+
     return NextResponse.json({
       success: true,
       item: newItem,
@@ -348,6 +353,11 @@ export async function DELETE(request: Request) {
         queryPg(`DELETE FROM radio_playlists WHERE filename LIKE '%${filename.replace(/'/g, "''")}%';`);
       }
     } catch {}
+
+    // Trigger dynamic server-side radio playlist rebuild on VPS
+    try {
+      execSync(`python3 /usr/local/bin/rtm-rebuild-radio-playlists.py ${stationSlug || ''}`, { encoding: 'utf-8', timeout: 4000 });
+    } catch (e) {}
 
     return NextResponse.json({ success: true, message: 'Radio playlist item deleted successfully' });
   } catch (err) {
