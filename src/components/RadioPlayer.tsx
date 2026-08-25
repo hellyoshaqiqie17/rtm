@@ -75,7 +75,9 @@ export default function RadioPlayer({ streamUrl: propStreamUrl }: RadioPlayerPro
     ? currentStation.streamUrl.replace('/radio/', '').replace('/radio', '') || 'live'
     : 'live';
 
-  const streamEndpoint = propStreamUrl || currentStation?.streamUrl || 'https://radio.rtm.tl/live';
+  const streamEndpoint = propStreamUrl || (currentStation?.streamUrl 
+    ? (currentStation.streamUrl.startsWith('http') ? currentStation.streamUrl : `https://radio.rtm.tl/${stationSlug}`)
+    : `https://radio.rtm.tl/live`);
 
   // Real Analytics: Record View & Send Viewer Heartbeat Ping
   useEffect(() => {
