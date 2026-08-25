@@ -159,6 +159,13 @@ function saveToPostgres(data: any) {
           ${sqlVal(c.selectedRecordingUrl || '')}
         );`;
         queryPg(sql);
+
+        // If channel source is changed to anything other than 'hls' (Live Ingest OBS), stop any active recording session
+        if (c.slug && c.activeSource && c.activeSource !== 'hls') {
+          try {
+            execSync(`python3 /usr/local/bin/rtm-record-hook.py stop ${c.slug}`, { encoding: 'utf-8' });
+          } catch (e) {}
+        }
       }
     }
 
