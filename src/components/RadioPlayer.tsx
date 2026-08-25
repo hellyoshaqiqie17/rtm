@@ -404,7 +404,6 @@ export default function RadioPlayer({ streamUrl: propStreamUrl }: RadioPlayerPro
                 </span>
                 <span className="text-neutral-600 font-normal">•</span>
                 <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded border border-white/15 bg-white/5 text-[11px] font-mono">
-                  <span className="text-neutral-400 font-bold uppercase tracking-wider text-[9px]">Stream VLC / App:</span>
                   <code className="text-[#E50914] font-bold select-all">
                     {`https://rtm.tl/radio-stream/${currentStation?.streamUrl ? currentStation.streamUrl.replace(/^\/radio\/?/, '').replace(/^\/+/, '').trim() || 'musicsrtm' : 'musicsrtm'}`}
                   </code>
