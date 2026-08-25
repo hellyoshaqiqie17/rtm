@@ -398,9 +398,18 @@ export default function RadioPlayer({ streamUrl: propStreamUrl }: RadioPlayerPro
             
             {/* Station Title & Program Description */}
             <div>
-              <span className="text-[11px] uppercase font-sans tracking-wider text-[#E50914] font-bold block mb-1">
-                SIARAN RADIO UTAMA ({currentStation.name})
-              </span>
+              <div className="flex flex-wrap items-center justify-center lg:justify-start gap-2 mb-1">
+                <span className="text-[11px] uppercase font-sans tracking-wider text-[#E50914] font-bold">
+                  SIARAN RADIO UTAMA ({currentStation.name})
+                </span>
+                <span className="text-neutral-600 font-normal">•</span>
+                <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded border border-white/15 bg-white/5 text-[11px] font-mono">
+                  <span className="text-neutral-400 font-bold uppercase tracking-wider text-[9px]">Stream VLC / App:</span>
+                  <code className="text-[#E50914] font-bold select-all">
+                    {`https://rtm.tl/radio-stream/${currentStation?.streamUrl ? currentStation.streamUrl.replace(/^\/radio\/?/, '').replace(/^\/+/, '').trim() || 'musicsrtm' : 'musicsrtm'}`}
+                  </code>
+                </div>
+              </div>
               <h3 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight line-clamp-1 font-sans">
                 {currentStation.name}
               </h3>
@@ -409,36 +418,6 @@ export default function RadioPlayer({ streamUrl: propStreamUrl }: RadioPlayerPro
                   ? 'Stasiun radio ini sedang dinonaktifkan (OFF).'
                   : `${currentStation.name} sedang mengudara live 24 jam non-stop.`}
               </p>
-
-              {/* External Player Stream Endpoint (VLC / TuneIn / Mobile App) */}
-              <div className="mt-3 pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-black/50 p-3 rounded-xl border border-white/10 text-left">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-7 h-7 rounded-lg bg-[#E50914]/10 border border-[#E50914]/30 flex items-center justify-center text-[#E50914] shrink-0">
-                    <RadioIcon className="w-3.5 h-3.5" />
-                  </div>
-                  <div className="min-w-0">
-                    <span className="text-[10px] uppercase font-mono tracking-wider text-neutral-400 font-bold block">
-                      URL Stream Eksternal (VLC / TuneIn / App)
-                    </span>
-                    <code className="text-xs font-mono font-bold text-[#E50914] select-all truncate block">
-                      {`https://rtm.tl/radio-stream/${currentStation?.streamUrl ? currentStation.streamUrl.replace(/^\/radio\/?/, '').replace(/^\/+/, '').trim() || 'musicsrtm' : 'musicsrtm'}`}
-                    </code>
-                  </div>
-                </div>
-                <button
-                  onClick={() => {
-                    const slug = currentStation?.streamUrl ? currentStation.streamUrl.replace(/^\/radio\/?/, '').replace(/^\/+/, '').trim() || 'musicsrtm' : 'musicsrtm';
-                    const url = `https://rtm.tl/radio-stream/${slug}`;
-                    navigator.clipboard.writeText(url);
-                    setCopiedRadioUrl(true);
-                    setTimeout(() => setCopiedRadioUrl(false), 2000);
-                  }}
-                  className="flex items-center justify-center gap-1.5 px-3 py-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-bold transition-all shrink-0 cursor-pointer border border-white/10 active:scale-95"
-                >
-                  {copiedRadioUrl ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-neutral-300" />}
-                  <span>{copiedRadioUrl ? 'Tersalin!' : 'Salin Stream'}</span>
-                </button>
-              </div>
             </div>
 
             {/* Audio Canvas Equalizer Visualizer */}

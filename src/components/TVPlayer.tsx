@@ -791,6 +791,13 @@ export default function TVPlayer({ channel: customChannel, streamUrl: propStream
           )}
           <span>{new Date().getFullYear()}</span>
           <span>Full HD</span>
+          <span className="text-neutral-600 font-normal">•</span>
+          <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded border border-white/15 bg-white/5 text-[11px] font-mono">
+            <span className="text-neutral-400 font-bold uppercase tracking-wider text-[9px]">Stream VLC / IPTV:</span>
+            <code className="text-[#E50914] font-bold select-all">
+              {`https://live.rtm.tl/live/${currentChannel?.slug || 'rtmstream'}/index.m3u8`}
+            </code>
+          </div>
         </div>
 
         {/* Program Title */}
@@ -804,35 +811,6 @@ export default function TVPlayer({ channel: customChannel, streamUrl: propStream
         <p className="text-xs text-neutral-400 leading-relaxed max-w-2xl mt-1">
           {currentChannel.currentProgram || 'Menampilkan siaran televisi resmi RTM Maubere secara langsung dan interaktif. Nikmati tayangan berita terkini, program edukasi, budaya, dan hiburan 24 jam non-stop dengan kualitas siaran prima.'}
         </p>
-
-        {/* External Player Stream Endpoint (VLC / IPTV / Mobile App) */}
-        <div className="mt-3 pt-3 border-t border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-black/40 p-3 rounded-xl border border-white/5">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-lg bg-[#E50914]/10 border border-[#E50914]/30 flex items-center justify-center text-[#E50914] shrink-0">
-              <Tv className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              <span className="text-[10px] uppercase font-mono tracking-wider text-neutral-400 font-bold block">
-                URL Stream Eksternal (VLC / IPTV / Mobile App)
-              </span>
-              <code className="text-xs font-mono font-bold text-[#E50914] select-all truncate block">
-                {`https://live.rtm.tl/live/${currentChannel?.slug || 'rtmstream'}/index.m3u8`}
-              </code>
-            </div>
-          </div>
-          <button
-            onClick={() => {
-              const url = `https://live.rtm.tl/live/${currentChannel?.slug || 'rtmstream'}/index.m3u8`;
-              navigator.clipboard.writeText(url);
-              setCopiedUrl(true);
-              setTimeout(() => setCopiedUrl(false), 2000);
-            }}
-            className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-bold transition-all shrink-0 cursor-pointer border border-white/10 active:scale-95"
-          >
-            {copiedUrl ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-neutral-300" />}
-            <span>{copiedUrl ? 'Tersalin!' : 'Salin URL Stream (VLC)'}</span>
-          </button>
-        </div>
       </div>
 
     </div>
