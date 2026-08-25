@@ -19,9 +19,7 @@ export default function AdminKelolaTvPage() {
 
   const activeGuideChannel = channels.find((c) => c.id === selectedGuideChannelId) || channels[0];
   const activeStreamKey = activeGuideChannel?.slug || 'coba';
-  const activeWebHlsUrl = activeGuideChannel?.hlsUrl
-    ? (activeGuideChannel.hlsUrl.startsWith('http') ? activeGuideChannel.hlsUrl : `https://rtm.tl${activeGuideChannel.hlsUrl}`)
-    : `https://rtm.tl/live/${activeStreamKey}/index.m3u8`;
+  const activeWebHlsUrl = `https://live.rtm.tl/live/${activeStreamKey}/index.m3u8`;
 
   // Form states for New Channel
   const [title, setTitle] = useState('');

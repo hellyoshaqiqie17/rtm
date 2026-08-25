@@ -81,10 +81,11 @@ export default function AdminSiaranCenterPage() {
 
   const activeStation = radioChannels.find((r) => r.id === activeRadioChannelId) || radioChannels[0];
 
-  // Get current active mount slug
-  const activeMountSlug = activeStation?.streamUrl
-    ? activeStation.streamUrl.replace('/radio', '') || '/live'
-    : '/live';
+  // Get current active mount slug (always with leading slash / for Mixxx/BUTT)
+  const rawSlug = activeStation?.streamUrl
+    ? activeStation.streamUrl.replace(/^\/radio/, '').trim()
+    : '/musicsrtm';
+  const activeMountSlug = rawSlug.startsWith('/') ? rawSlug : `/${rawSlug}`;
 
   // Fetch real-time radio status from API
   useEffect(() => {
@@ -148,7 +149,8 @@ export default function AdminSiaranCenterPage() {
   // Format display stream URL (make relative paths show as full HTTPS URL for clarity)
   const getFullStreamUrl = (url: string) => {
     if (url.startsWith('http://') || url.startsWith('https://')) return url;
-    return `https://rtm.tl${url.startsWith('/') ? '' : '/'}${url}`;
+    const cleanSlug = url.replace(/^\/radio\/?/, '').replace(/^\/+/, '').trim() || 'live';
+    return `https://rtm.tl/radio-stream/${cleanSlug}`;
   };
 
   // Handle local image file upload for Add Modal
@@ -555,22 +557,22 @@ export default function AdminSiaranCenterPage() {
             <div className="text-[10px] text-[#737373] font-mono">Login: <span className="text-white font-medium">source</span></div>
           </div>
 
-          {/* Public HTTPS Stream URL */}
+          {/* Public Universal HTTPS Stream URL */}
           <div className="bg-[#121212] p-4 rounded-xl border border-white/10 space-y-1.5 relative">
             <div className="flex items-center justify-between text-[#A3A3A3] font-mono text-[10px] uppercase tracking-wider">
-              <span>4. URL Stream Web</span>
+              <span>4. URL Stream (TuneIn/VLC)</span>
               <button
                 onClick={() => copyToClipboard(getFullStreamUrl(activeStation?.streamUrl || '/radio/live'), 'pub')}
                 className="text-neutral-400 hover:text-white cursor-pointer transition-colors"
-                title="Salin URL Stream Web"
+                title="Salin URL Stream Radio Universal"
               >
                 {copiedKey === 'pub' ? <Check className="w-3.5 h-3.5 text-[#E50914]" /> : <Copy className="w-3.5 h-3.5" />}
               </button>
             </div>
-            <div className="font-mono font-bold text-white text-xs truncate" title={getFullStreamUrl(activeStation?.streamUrl || '/radio/live')}>
+            <div className="font-mono font-bold text-[#E50914] text-xs truncate" title={getFullStreamUrl(activeStation?.streamUrl || '/radio/live')}>
               {getFullStreamUrl(activeStation?.streamUrl || '/radio/live')}
             </div>
-            <div className="text-[10px] text-[#737373] font-mono">Tampil di <span className="text-white">https://rtm.tl/radio</span></div>
+            <div className="text-[10px] text-[#737373] font-mono">Untuk <span className="text-white">TuneIn / VLC / App Mobile</span></div>
           </div>
 
         </div>
