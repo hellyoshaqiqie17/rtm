@@ -77,8 +77,19 @@ Dokumen ini memuat daftar spesifikasi teknis, arsitektur sistem, perbaikan bug, 
   - **Masalah**: Pada saat Admin memilih `MP4 Playlist 24/7`, player pada web publik sempat beralih ke *Replay Playback* karena service daemon daemon FFmpeg (`rtm-tv-smart-looper.py`) sebelumnya hanya mem-publish ke endpoint `live/tv`, sedangkan slug channel aktif pada database adalah `rtmstream` (`/live/rtmstream/index.m3u8`).
   - **Solusi**:
     1. Memperbarui script daemon `/usr/local/bin/rtm-tv-smart-looper.py` pada VPS agar secara otomatis mem-publish siaran ke **seluruh channel slug aktif** (`rtmstream` & `tv`).
-    2. Hasil stream `/live/rtmstream/index.m3u8` kini mengembalikan **HTTP 200 OK** (HLS Live Murni).
-    3. TV Player kini langsung memutar siaran HLS Live dari server dengan badge **`🔴 SIARAN LANGSUNG`** tanpa progress bar/seekbar dan tanpa beralih ke replay playback.
+### 6. Implementasi Server-Side Radio Broadcasting (Icecast 24/7 MP3 AutoDJ)
+* **Daemon Smart AutoDJ Radio (`rtm-radio-smart-looper.py`)**:
+  - Dibuat daemon server-side di `/usr/local/bin/rtm-radio-smart-looper.py` yang berjalan 24 jam nonstop via service `rtm-autodj.service` di VPS.
+  - Memindai seluruh stasiun radio di database PostgreSQL `radio_channels` dan direktori `/var/media/radio-playlists/{slug}/`, lalu melakukan streaming audio MP3 **128 kbps 44.1kHz** ke Icecast mountpoint (`http://localhost:8000/{slug}`).
+  - **Auto-Yield untuk Live DJ**: Jika ada penyiar eksternal (Mixxx / BUTT / OBS Audio) yang terhubung ke Icecast pada mountpoint stasiun, AutoDJ secara otomatis menghentikan pemutaran playlist agar siaran live ter-ingest secara mulus tanpa tabrakan audio.
+
+* **Rebuilder Playlist Otomatis (`rtm-rebuild-radio-playlists.py`)**:
+  - Script rebuilder otomatis di-trigger dari Next.js API `/api/radio/playlist/route.ts` saat file lagu MP3 diunggah atau dihapus, sehingga playlist AutoDJ di VPS langsung ter-update seketika.
+
+* **Stream URL Universal (Subdomain & Icecast Direct)**:
+  - Nginx dikonfigurasi agar subdomain `https://radio.rtm.tl/{slug}` langsung mem-proxy stream MP3 audio dari Icecast 8000.
+  - Sangat kompatibel untuk dipasang di aplikasi radio eksternal (**TuneIn**, **Radio Garden**, **VLC**, **Winamp**, maupun aplikasi mobile iOS/Android).
+  - Seluruh pendengar di web player maupun aplikasi eksternal mendengarkan siaran live audio dan detik lagu yang **sama persis secara global**.
 
 ---
 
@@ -90,9 +101,9 @@ Dokumen ini memuat daftar spesifikasi teknis, arsitektur sistem, perbaikan bug, 
 | 2 | **TV - Fallback Replay** | Stop streaming dari OBS / vMix. | TV Player otomatis beralih memutar rekaman siaran terbaru secara berulang. | ✅ PASS |
 | 3 | **TV - MP4 Playlist 24/7** | Di Admin, pilih Master Source `MP4 Playlist 24/7`. | Player memutar siaran HLS Live 24/7 server-side (`/live/rtmstream/index.m3u8`) tanpa progress bar/seekbar. | ✅ PASS |
 | 4 | **TV - Pseudolive Sync** | Buka halaman `https://rtm.tl/tv` dari 2 browser / device yang berbeda secara bersamaan. | Kedua device menampilkan adegan video dan detik siaran HLS yang **sama persis**. | ✅ PASS |
-| 5 | **Radio - Mixxx/BUTT Live DJ** | Hubungkan Mixxx/BUTT ke Host `103.160.62.250:8000`, Mount `rtm-radio`, User `source`, Pass `RtmRadioLive2026!`. | Status Admin berubah `LIVE ON AIR` & audio siaran live dapat diputar jernih di web. | ✅ PASS |
-| 6 | **Radio - Kelola Playlist MP3** | Buka modal Kelola Playlist MP3 Radio, upload beberapa file `.mp3`. | Upload sukses (HTTP 200), file tersimpan di `/var/media/radio-playlists/` & masuk daftar. | ✅ PASS |
-| 7 | **Radio - MP3 Playlist 24/7** | Pilih Master Source `MP3 Playlist 24/7 (AutoDJ)` di Admin. | Pilihan tersimpan di PostgreSQL & player memutar rotasi lagu MP3 tanpa ter-reset. | ✅ PASS |
+| 5 | **Radio - Mixxx/BUTT Live DJ** | Hubungkan Mixxx/BUTT ke Host `103.160.62.250:8000`, Mount `music-radio`, User `source`, Pass `RtmRadioLive2026!`. | Status Admin berubah `LIVE ON AIR` & audio siaran live dapat diputar jernih di web. | ✅ PASS |
+| 6 | **Radio - MP3 AutoDJ 24/7** | Upload file MP3 di Admin Radio dan aktifkan stasiun radio. | Daemon `rtm-radio-smart-looper.py` memutar playlist MP3 24/7 di mount Icecast `http://localhost:8000/{slug}`. | ✅ PASS |
+| 7 | **Radio - Stream URL Universal** | Putar `https://radio.rtm.tl/music-radio` atau `http://103.160.62.250:8000/music-radio` di TuneIn / VLC / Web Player. | Mengembalikan stream audio MP3 live 128kbps sinkron secara global bagi seluruh pendengar. | ✅ PASS |
 | 8 | **Laporan Analitik Penonton** | Buka halaman Admin Analytics (`/admin/analytics`). | Menampilkan statistik penonton real-time & total views 100% angka asli dari server. | ✅ PASS |
 | 9 | **Database Persistence** | Lakukan perubahan setting di Admin, lalu restart service PM2 (`pm2 restart rtm-web`). | Seluruh data channel, playlist, dan setting tetap tersimpan utuh di PostgreSQL. | ✅ PASS |
 
@@ -101,5 +112,5 @@ Dokumen ini memuat daftar spesifikasi teknis, arsitektur sistem, perbaikan bug, 
 ## 📌 5. Ringkasan Repositori Git
 * **Repository**: `https://github.com/hellyoshaqiqie17/rtm.git`
 * **Branch**: `main`
-* **Latest Commit**: `c4f7972` (`feat: enforce server-side FFmpeg HLS/Icecast streaming for MP4 & MP3 24/7 playlists`)
+* **Latest Commit**: `b62c47e` (`feat: server-side radio broadcasting with dynamic AutoDJ and universal stream URLs`)
 
