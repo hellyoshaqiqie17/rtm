@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useStreamContext, Channel } from '@/context/StreamContext';
-import { Tv, Plus, Pin, Trash2, Edit2, X, Copy, Check, Info, Sparkles, Upload, Image as ImageIcon, Layers, Video, AlertTriangle, Film, CheckCircle2, Play, HardDrive } from 'lucide-react';
+import { Tv, Plus, Pin, Trash2, Edit2, X, Copy, Check, Info, Sparkles, Upload, Image as ImageIcon, Layers, Video, AlertTriangle, Film, CheckCircle2, Play, HardDrive, Power } from 'lucide-react';
 import PlaylistManagerModal from '@/components/PlaylistManagerModal';
 
 export default function AdminKelolaTvPage() {
@@ -147,7 +147,7 @@ export default function AdminKelolaTvPage() {
     });
   }, [channels]);
 
-  const handleSourceChange = (channelId: string, channelName: string, source: 'hls' | 'playlist' | 'recording' | 'youtube', selectedRecordingUrl?: string) => {
+  const handleSourceChange = (channelId: string, channelName: string, source: 'hls' | 'playlist' | 'recording' | 'youtube' | 'off', selectedRecordingUrl?: string) => {
     toggleChannelSource(channelId, source, selectedRecordingUrl);
     
     const modeLabels: Record<string, string> = {
@@ -155,6 +155,7 @@ export default function AdminKelolaTvPage() {
       playlist: '🎬 MP4 Playlist 24/7',
       recording: '📹 Hasil Rekaman (VOD)',
       youtube: '📺 YouTube Embed',
+      off: '⛔ Siaran Nonaktif (OFF)',
     };
 
     setSourceToast({
@@ -258,8 +259,8 @@ export default function AdminKelolaTvPage() {
             </div>
           )}
 
-          {/* 4 Mode Selector Buttons */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+          {/* 5 Mode Selector Buttons */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs">
             
             {/* Mode 1: Live Ingest OBS */}
             <button
@@ -350,6 +351,29 @@ export default function AdminKelolaTvPage() {
               </div>
               <p className="text-[10px] opacity-80 leading-snug">
                 Putar siaran embed dari kanal YouTube resmi RTM MAUBERE.
+              </p>
+            </button>
+
+            {/* Mode 5: Matikan Siaran (OFF) */}
+            <button
+              type="button"
+              onClick={() => handleSourceChange(activeGuideChannel.id, activeGuideChannel.name, 'off')}
+              className={`p-4 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between space-y-2 ${
+                activeGuideChannel.activeSource === 'off'
+                  ? 'bg-neutral-900 text-red-500 border-red-600 shadow-lg shadow-red-950/80 font-bold'
+                  : 'bg-black/60 text-neutral-300 border-white/10 hover:border-red-500/40 hover:bg-red-950/20'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="font-extrabold text-xs flex items-center gap-1.5 text-red-500">
+                  <Power className="w-4 h-4 text-red-500" /> Matikan Siaran (OFF)
+                </span>
+                {activeGuideChannel.activeSource === 'off' && (
+                  <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping"></span>
+                )}
+              </div>
+              <p className="text-[10px] opacity-80 leading-snug text-neutral-400">
+                Matikan seluruh sumber siaran (OFF). Player publik akan menampilkan siaran nonaktif.
               </p>
             </button>
 

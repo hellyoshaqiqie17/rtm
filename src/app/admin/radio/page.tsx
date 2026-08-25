@@ -27,7 +27,8 @@ import {
   Disc,
   CheckCircle2,
   AlertTriangle,
-  Film
+  Film,
+  Power
 } from 'lucide-react';
 
 export default function AdminSiaranCenterPage() {
@@ -227,9 +228,13 @@ export default function AdminSiaranCenterPage() {
     setEditingRadio(null);
   };
 
-  const handleSourceChange = (stationId: string, stationName: string, source: 'icecast' | 'playlist') => {
+  const handleSourceChange = (stationId: string, stationName: string, source: 'icecast' | 'playlist' | 'off') => {
     toggleRadioChannelSource(stationId, source);
-    const label = source === 'playlist' ? 'MP3 Playlist 24/7 (AutoDJ)' : 'Live External Stream (Mixxx/BUTT)';
+    const label = source === 'playlist' 
+      ? 'MP3 Playlist 24/7 (AutoDJ)' 
+      : source === 'icecast' 
+        ? 'Live External Stream (Mixxx/BUTT)' 
+        : '⛔ Matikan Siaran (OFF)';
     setSourceToast({ message: `Sumber siaran stasiun "${stationName}" berhasil diubah ke: ${label}` });
     setTimeout(() => setSourceToast(null), 4000);
   };
@@ -383,15 +388,15 @@ export default function AdminSiaranCenterPage() {
             </div>
           )}
 
-          {/* 2 Mode Selector Buttons for Radio */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+          {/* 3 Mode Selector Buttons for Radio */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
             
             {/* Mode 1: Live Stream External (Mixxx / BUTT / Icecast) */}
             <button
               type="button"
               onClick={() => handleSourceChange(activeStation.id, activeStation.name, 'icecast')}
               className={`p-4 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between space-y-2 ${
-                activeStation.activeSource !== 'playlist'
+                activeStation.activeSource === 'icecast' || (!activeStation.activeSource && activeStation.activeSource !== 'playlist' && activeStation.activeSource !== 'off')
                   ? 'bg-orange-600 text-white border-orange-600 shadow-lg shadow-orange-900/40 font-bold'
                   : 'bg-black/60 text-neutral-300 border-white/10 hover:border-white/30 hover:bg-white/5'
               }`}
@@ -400,7 +405,7 @@ export default function AdminSiaranCenterPage() {
                 <span className="font-extrabold text-xs flex items-center gap-1.5">
                   <Mic className="w-4 h-4" /> Live External Stream (Mixxx / BUTT)
                 </span>
-                {activeStation.activeSource !== 'playlist' && (
+                {(activeStation.activeSource === 'icecast' || (!activeStation.activeSource && activeStation.activeSource !== 'playlist' && activeStation.activeSource !== 'off')) && (
                   <span className="w-2.5 h-2.5 rounded-full bg-white animate-ping"></span>
                 )}
               </div>
@@ -429,6 +434,29 @@ export default function AdminSiaranCenterPage() {
               </div>
               <p className="text-[10px] opacity-80 leading-snug">
                 Siaran otomatis 24 jam non-stop memutar daftar trek lagu MP3 yang telah diunggah.
+              </p>
+            </button>
+
+            {/* Mode 3: Matikan Siaran (OFF) */}
+            <button
+              type="button"
+              onClick={() => handleSourceChange(activeStation.id, activeStation.name, 'off')}
+              className={`p-4 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between space-y-2 ${
+                activeStation.activeSource === 'off'
+                  ? 'bg-neutral-900 text-red-500 border-red-600 shadow-lg shadow-red-950/80 font-bold'
+                  : 'bg-black/60 text-neutral-300 border-white/10 hover:border-red-500/40 hover:bg-red-950/20'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="font-extrabold text-xs flex items-center gap-1.5 text-red-500">
+                  <Power className="w-4 h-4 text-red-500" /> Matikan Siaran (OFF)
+                </span>
+                {activeStation.activeSource === 'off' && (
+                  <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping"></span>
+                )}
+              </div>
+              <p className="text-[10px] opacity-80 leading-snug text-neutral-400">
+                Matikan seluruh sumber siaran (OFF). Player radio publik akan menampilkan stasiun nonaktif.
               </p>
             </button>
 

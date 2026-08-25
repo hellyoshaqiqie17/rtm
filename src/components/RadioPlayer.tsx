@@ -196,6 +196,11 @@ export default function RadioPlayer({ streamUrl: propStreamUrl }: RadioPlayerPro
   }, [isPlaying]);
 
   const togglePlay = () => {
+    if (currentStation?.activeSource === 'off') {
+      setError('Stasiun radio ini sedang dinonaktifkan (OFF) oleh administrator.');
+      return;
+    }
+
     const audio = audioRef.current;
     if (!audio) return;
 
@@ -370,8 +375,17 @@ export default function RadioPlayer({ streamUrl: propStreamUrl }: RadioPlayerPro
 
               {/* Status Badge */}
               <div className="absolute -bottom-2 px-3.5 py-1 rounded-full bg-[#121212] border border-white/10 text-[11px] font-bold text-white shadow-md flex items-center gap-1.5 font-sans">
-                <span className="w-2 h-2 rounded-full bg-[#E50914] animate-pulse"></span>
-                <span>RADIO LIVE 24/7</span>
+                {currentStation?.activeSource === 'off' ? (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-red-600"></span>
+                    <span className="text-red-400">RADIO OFF (NONAKTIF)</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-[#E50914] animate-pulse"></span>
+                    <span>RADIO LIVE 24/7</span>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -388,7 +402,9 @@ export default function RadioPlayer({ streamUrl: propStreamUrl }: RadioPlayerPro
                 {currentStation.name}
               </h3>
               <p className="text-sm text-neutral-300 font-medium mt-1 font-sans">
-                {currentStation.name} sedang mengudara live 24 jam non-stop.
+                {currentStation?.activeSource === 'off' 
+                  ? 'Stasiun radio ini sedang dinonaktifkan (OFF).'
+                  : `${currentStation.name} sedang mengudara live 24 jam non-stop.`}
               </p>
             </div>
 
@@ -409,8 +425,12 @@ export default function RadioPlayer({ streamUrl: propStreamUrl }: RadioPlayerPro
               <div className="flex items-center gap-3">
                 <button
                   onClick={togglePlay}
-                  disabled={loading}
-                  className="w-14 h-14 rounded-2xl bg-[#E50914] hover:bg-red-700 text-white flex items-center justify-center shadow-lg shadow-red-900/40 hover:scale-105 transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                  disabled={loading || currentStation?.activeSource === 'off'}
+                  className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg hover:scale-105 transition-all active:scale-95 disabled:opacity-50 cursor-pointer ${
+                    currentStation?.activeSource === 'off'
+                      ? 'bg-neutral-800 text-neutral-500 border border-neutral-700 shadow-none'
+                      : 'bg-[#E50914] hover:bg-red-700 text-white shadow-red-900/40'
+                  }`}
                 >
                   {loading ? (
                     <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
@@ -423,10 +443,14 @@ export default function RadioPlayer({ streamUrl: propStreamUrl }: RadioPlayerPro
 
                 <div className="text-left">
                   <span className="text-xs font-bold text-white block font-sans">
-                    {isPlaying ? 'Siaran Radio Sedang Diputar (Live)' : 'Tekan Play Untuk Mendengarkan'}
+                    {currentStation?.activeSource === 'off'
+                      ? 'Siaran Radio Nonaktif (OFF)'
+                      : isPlaying ? 'Siaran Radio Sedang Diputar (Live)' : 'Tekan Play Untuk Mendengarkan'}
                   </span>
                   <span className="text-[11px] text-neutral-400 font-sans">
-                    Siaran audio jernih 24 jam non-stop
+                    {currentStation?.activeSource === 'off'
+                      ? 'Stasiun ini sedang tidak mengudara'
+                      : 'Siaran audio jernih 24 jam non-stop'}
                   </span>
                 </div>
               </div>

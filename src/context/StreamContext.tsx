@@ -11,7 +11,7 @@ export interface Channel {
   category?: string;
   hlsUrl: string;
   youtubeUrl: string;
-  activeSource: 'hls' | 'youtube' | 'playlist' | 'recording';
+  activeSource: 'hls' | 'youtube' | 'playlist' | 'recording' | 'off';
   thumbnail: string;
   currentProgram: string;
   enabled: boolean;
@@ -28,7 +28,7 @@ export interface RadioChannel {
   thumbnail: string;
   category?: string;
   enabled: boolean;
-  activeSource?: 'icecast' | 'playlist';
+  activeSource?: 'icecast' | 'playlist' | 'off';
 }
 
 export interface ScheduleItem {
@@ -91,7 +91,7 @@ interface StreamContextType {
   updateChannel: (updatedChannel: Channel) => void;
   addChannel: (newChannel: Omit<Channel, 'id'>) => void;
   deleteChannel: (id: string) => void;
-  toggleChannelSource: (id: string, source: 'hls' | 'youtube' | 'playlist' | 'recording', selectedRecordingUrl?: string) => void;
+  toggleChannelSource: (id: string, source: 'hls' | 'youtube' | 'playlist' | 'recording' | 'off', selectedRecordingUrl?: string) => void;
 
   // Categories State
   categories: string[];
@@ -121,7 +121,7 @@ interface StreamContextType {
   addRadioChannel: (newRadio: Omit<RadioChannel, 'id'>) => void;
   updateRadioChannel: (updatedRadio: RadioChannel) => void;
   deleteRadioChannel: (id: string) => void;
-  toggleRadioChannelSource: (id: string, source: 'icecast' | 'playlist') => void;
+  toggleRadioChannelSource: (id: string, source: 'icecast' | 'playlist' | 'off') => void;
   resetRadioChannels: () => void;
 
   // Radio URL backward compatibility
@@ -354,7 +354,7 @@ export function StreamProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const toggleChannelSource = (id: string, source: 'hls' | 'youtube' | 'playlist' | 'recording', selectedRecordingUrl?: string) => {
+  const toggleChannelSource = (id: string, source: 'hls' | 'youtube' | 'playlist' | 'recording' | 'off', selectedRecordingUrl?: string) => {
     const next = channels.map((c) => {
       if (c.id === id) {
         return {
@@ -417,7 +417,7 @@ export function StreamProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const toggleRadioChannelSource = (id: string, source: 'icecast' | 'playlist') => {
+  const toggleRadioChannelSource = (id: string, source: 'icecast' | 'playlist' | 'off') => {
     const next = radioChannels.map((r) => (r.id === id ? { ...r, activeSource: source } : r));
     saveRadioChannelsState(next);
   };

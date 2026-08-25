@@ -106,11 +106,12 @@ Dokumen ini memuat daftar spesifikasi teknis, arsitektur sistem, perbaikan bug, 
 | 7 | **Radio - Stream URL Universal** | Putar `https://radio.rtm.tl/music-radio` atau `http://103.160.62.250:8000/music-radio` di TuneIn / VLC / Web Player. | Mengembalikan stream audio MP3 live 128kbps sinkron secara global bagi seluruh pendengar. | ✅ PASS |
 | 8 | **Laporan Analitik Penonton** | Buka halaman Admin Analytics (`/admin/analytics`). | Menampilkan statistik penonton real-time & total views 100% angka asli dari server. | ✅ PASS |
 | 9 | **Database Persistence** | Lakukan perubahan setting di Admin, lalu restart service PM2 (`pm2 restart rtm-web`). | Seluruh data channel, playlist, dan setting tetap tersimpan utuh di PostgreSQL. | ✅ PASS |
+| 10 | **Tombol OFF Siaran (TV & Radio)** | Di Admin TV / Radio, pilih `Matikan Siaran (OFF)`. | Daemon mematikan seluruh proses FFmpeg server-side, mount Icecast ditutup, dan web player publik menampilkan tampilan resmi Siaran OFF. | ✅ PASS |
 
 ---
 
 ## 📌 5. Ringkasan Repositori Git
 * **Repository**: `https://github.com/hellyoshaqiqie17/rtm.git`
 * **Branch**: `main`
-* **Latest Commit**: `193ef22` (`fix: disable proxy buffering for radio audio streams and enforce AutoDJ playlist override`)
+* **Latest Commit**: `8fa7921` (`feat: add broadcast OFF mode button for TV and radio channels with server-side process termination`)
 

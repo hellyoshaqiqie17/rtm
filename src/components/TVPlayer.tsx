@@ -14,7 +14,8 @@ import {
   AlertCircle,
   Layers,
   Film,
-  Video
+  Video,
+  Power
 } from 'lucide-react';
 
 interface TVPlayerProps {
@@ -594,8 +595,12 @@ export default function TVPlayer({ channel: customChannel, streamUrl: propStream
               {currentChannel.name}
             </span>
 
-            {/* DYNAMIC LIVE VS REPLAY BADGE */}
-            {isLiveBroadcasting || isPlaylistMode ? (
+            {/* DYNAMIC LIVE VS REPLAY VS OFF BADGE */}
+            {activeSource === 'off' ? (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-neutral-900 text-red-400 border border-red-800 text-xs font-extrabold shadow-lg">
+                <Power className="w-3.5 h-3.5 text-red-500" /> SIARAN OFF
+              </span>
+            ) : isLiveBroadcasting || isPlaylistMode ? (
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-[#E50914] text-white text-xs font-extrabold shadow-lg animate-pulse">
                 <span className="w-2 h-2 rounded-full bg-white"></span> LIVE
               </span>
@@ -608,7 +613,20 @@ export default function TVPlayer({ channel: customChannel, streamUrl: propStream
         </div>
 
         {/* PLAYER DISPLAY */}
-        {activeSource === 'youtube' ? (
+        {activeSource === 'off' ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-neutral-950 via-black to-neutral-900 p-6 text-center z-20 font-sans">
+            <div className="w-16 h-16 rounded-full bg-red-950/80 border border-red-500/40 flex items-center justify-center text-red-500 mb-4 shadow-2xl animate-pulse">
+              <Power className="w-8 h-8" />
+            </div>
+            <span className="px-3 py-1 rounded-full bg-red-950 text-red-400 border border-red-800 text-[10px] font-extrabold uppercase tracking-wider mb-2 font-mono">
+              ● SIARAN TV NONAKTIF (OFF)
+            </span>
+            <h4 className="text-lg font-extrabold text-white mb-2 tracking-tight">{currentChannel?.name || 'Saluran TV'} Sedang OFF</h4>
+            <p className="text-xs text-neutral-400 max-w-md">
+              Siaran langsung pada saluran ini telah dinonaktifkan oleh administrator. Silakan pilih saluran lain atau kembali lagi nanti.
+            </p>
+          </div>
+        ) : activeSource === 'youtube' ? (
           <iframe
             src={getEmbedUrl(currentChannel.youtubeUrl)}
             title={currentChannel.name}
