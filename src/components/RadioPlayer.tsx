@@ -71,13 +71,13 @@ export default function RadioPlayer({ streamUrl: propStreamUrl }: RadioPlayerPro
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [duration, setDuration] = useState<number>(0);
 
-  const stationSlug = currentStation?.streamUrl
-    ? currentStation.streamUrl.replace('/radio/', '').replace('/radio', '') || 'live'
+  const cleanSlug = currentStation?.streamUrl
+    ? currentStation.streamUrl.replace(/^\/radio\/?/, '').replace(/^\/+/, '').trim() || 'live'
     : 'live';
 
-  const streamEndpoint = propStreamUrl || (currentStation?.streamUrl 
-    ? (currentStation.streamUrl.startsWith('http') ? currentStation.streamUrl : `https://radio.rtm.tl/${stationSlug}`)
-    : `https://radio.rtm.tl/live`);
+  const streamEndpoint = propStreamUrl && propStreamUrl.startsWith('http')
+    ? propStreamUrl
+    : `https://radio.rtm.tl/${cleanSlug}`;
 
   // Real Analytics: Record View & Send Viewer Heartbeat Ping
   useEffect(() => {
@@ -112,18 +112,13 @@ export default function RadioPlayer({ streamUrl: propStreamUrl }: RadioPlayerPro
 
     setIsPlaylistMode(currentStation.activeSource === 'playlist');
 
-    // Build canonical server-side stream URL
-    const targetUrl = streamEndpoint.startsWith('http') || streamEndpoint.startsWith('/radio')
-      ? streamEndpoint
-      : `/radio/${stationSlug}`;
-
-    if (audio.src !== targetUrl) {
-      audio.src = targetUrl;
+    if (audio.src !== streamEndpoint) {
+      audio.src = streamEndpoint;
       if (isPlaying) {
         audio.play().catch(console.error);
       }
     }
-  }, [currentStation?.id, currentStation?.activeSource, streamEndpoint, stationSlug]);
+  }, [currentStation?.id, currentStation?.activeSource, streamEndpoint]);
 
   const handleAudioEnded = () => {
     setIsPlaying(false);
