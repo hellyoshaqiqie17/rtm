@@ -167,7 +167,7 @@ export default function TVPlayer({ channel: customChannel, streamUrl: propStream
         setLoading(false);
         setError(null);
         setIsLiveBroadcasting(true);
-        setIsPlaylistMode(false);
+        setIsPlaylistMode(activeSource === 'playlist');
         isCurrentlyLiveRef.current = true;
         video.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
       });
@@ -189,7 +189,7 @@ export default function TVPlayer({ channel: customChannel, streamUrl: propStream
         setLoading(false);
         setError(null);
         setIsLiveBroadcasting(true);
-        setIsPlaylistMode(false);
+        setIsPlaylistMode(activeSource === 'playlist');
         isCurrentlyLiveRef.current = true;
         video.play().then(() => setIsPlaying(true)).catch(() => setIsPlaying(false));
       });
