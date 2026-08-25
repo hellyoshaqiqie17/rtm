@@ -112,5 +112,5 @@ Dokumen ini memuat daftar spesifikasi teknis, arsitektur sistem, perbaikan bug, 
 ## 📌 5. Ringkasan Repositori Git
 * **Repository**: `https://github.com/hellyoshaqiqie17/rtm.git`
 * **Branch**: `main`
-* **Latest Commit**: `b62c47e` (`feat: server-side radio broadcasting with dynamic AutoDJ and universal stream URLs`)
+* **Latest Commit**: `193ef22` (`fix: disable proxy buffering for radio audio streams and enforce AutoDJ playlist override`)
 
