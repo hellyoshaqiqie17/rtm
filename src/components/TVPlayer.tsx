@@ -232,6 +232,19 @@ export default function TVPlayer({ channel: customChannel, streamUrl: propStream
       return;
     }
 
+    if (activeSource === 'off') {
+      setLoading(false);
+      setError(null);
+      isCurrentlyLiveRef.current = false;
+      setIsLiveBroadcasting(false);
+      setIsPlaylistMode(false);
+      if (videoRef.current) {
+        videoRef.current.pause();
+        videoRef.current.src = '';
+      }
+      return;
+    }
+
     const video = videoRef.current;
     if (!video) return;
 
@@ -530,11 +543,21 @@ export default function TVPlayer({ channel: customChannel, streamUrl: propStream
   };
 
   const getEmbedUrl = (url: string) => {
-    if (url.includes('embed/')) return url;
-    if (url.includes('watch?v=')) {
-      const videoId = url.split('watch?v=')[1]?.split('&')[0];
-      return `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=0`;
+    if (!url) return '';
+    let videoId = '';
+    if (url.includes('embed/')) {
+      const clean = url.split('embed/')[1]?.split('?')[0];
+      videoId = clean || '';
+    } else if (url.includes('watch?v=')) {
+      videoId = url.split('watch?v=')[1]?.split('&')[0];
+    } else if (url.includes('youtu.be/')) {
+      videoId = url.split('youtu.be/')[1]?.split('?')[0];
     }
+
+    if (videoId && !videoId.includes('live_stream')) {
+      return `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=0&rel=0&modestbranding=1`;
+    }
+    if (url.includes('embed/')) return url;
     return 'https://www.youtube.com/embed/live_stream?channel=UC_rtm_live_official';
   };
 
@@ -553,7 +576,7 @@ export default function TVPlayer({ channel: customChannel, streamUrl: propStream
   }
 
   return (
-    <div className="w-full space-y-4 font-sans">
+    <div id="rtm-tv-player" className="w-full space-y-4 font-sans">
 
       {/* Saluran TV Switcher Pills */}
       <div className="flex items-center justify-between bg-[#121212] p-3 rounded-2xl border border-white/5 shadow-md">
@@ -565,23 +588,14 @@ export default function TVPlayer({ channel: customChannel, streamUrl: propStream
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {channels.filter((c) => c && c.id).map((chan) => {
-            const isSelected = currentChannel && chan.id === currentChannel.id;
-            return (
-              <button
-                key={chan.id}
-                onClick={() => setActiveChannelId(chan.id)}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
-                  isSelected
-                    ? 'bg-[#E50914] text-white border-[#E50914] shadow-md'
-                    : 'bg-black/60 text-neutral-400 hover:text-white border-white/10'
-                }`}
-              >
-                <span className={`w-2 h-2 rounded-full ${isSelected ? 'bg-white animate-pulse' : 'bg-neutral-600'}`}></span>
-                <span>{chan.name}</span>
-              </button>
-            );
-          })}
+          {currentChannel && (
+            <div
+              className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold border border-[#E50914] bg-[#E50914] text-white shadow-md cursor-default"
+            >
+              <span className="w-2 h-2 rounded-full bg-white animate-pulse"></span>
+              <span>{currentChannel.name}</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -602,6 +616,10 @@ export default function TVPlayer({ channel: customChannel, streamUrl: propStream
             {activeSource === 'off' ? (
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-neutral-900 text-red-400 border border-red-800 text-xs font-extrabold shadow-lg">
                 <Power className="w-3.5 h-3.5 text-red-500" /> SIARAN OFF
+              </span>
+            ) : activeSource === 'youtube' ? (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-[#ff0000] text-white text-xs font-extrabold shadow-lg border border-red-600">
+                YOUTUBE
               </span>
             ) : isLiveBroadcasting || isPlaylistMode ? (
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-[#E50914] text-white text-xs font-extrabold shadow-lg animate-pulse">
@@ -779,7 +797,11 @@ export default function TVPlayer({ channel: customChannel, streamUrl: propStream
         
         {/* Top meta tags */}
         <div className="flex flex-wrap items-center gap-2 text-[10px] md:text-xs font-bold text-neutral-400">
-          {isLiveBroadcasting || isPlaylistMode ? (
+          {activeSource === 'youtube' ? (
+            <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-[#ff0000] text-white text-[10px] font-extrabold tracking-wide uppercase">
+              YOUTUBE
+            </span>
+          ) : isLiveBroadcasting || isPlaylistMode ? (
             <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-[#E50914] text-white text-[10px] font-extrabold tracking-wide uppercase">
               <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
               LIVE

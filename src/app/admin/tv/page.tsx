@@ -1,21 +1,28 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useStreamContext, Channel } from '@/context/StreamContext';
-import { Tv, Plus, Pin, Trash2, Edit2, X, Copy, Check, Info, Sparkles, Upload, Image as ImageIcon, Layers, Video, AlertTriangle, Film, CheckCircle2, Play, HardDrive, Power } from 'lucide-react';
+import { useStreamContext, Channel, getYouTubeThumbnail, extractYouTubeVideoId } from '@/context/StreamContext';
+import { Tv, Plus, Pin, Trash2, Edit2, X, Copy, Check, Info, Sparkles, Upload, Image as ImageIcon, Layers, Video, AlertTriangle, Film, CheckCircle2, Play, HardDrive, Power, Search, ChevronLeft, ChevronRight, Zap } from 'lucide-react';
 import PlaylistManagerModal from '@/components/PlaylistManagerModal';
 
 export default function AdminKelolaTvPage() {
-  const { channels, addChannel, updateChannel, deleteChannel, toggleChannelSource, categories } = useStreamContext();
+  const { channels, addChannel, updateChannel, deleteChannel, toggleChannelSource, categories, siteSettings, updateSiteSettings } = useStreamContext();
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingChannel, setEditingChannel] = useState<Channel | null>(null);
   const [playlistModalChannel, setPlaylistModalChannel] = useState<Channel | null>(null);
   const [deleteConfirmChannel, setDeleteConfirmChannel] = useState<Channel | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [pinnedId, setPinnedId] = useState<string | null>('coba');
+
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [selectedGuideChannelId, setSelectedGuideChannelId] = useState<string>('');
+
+  // Pagination & Filter States for Channel Listing Table
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(8);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterCategory, setFilterCategory] = useState('all');
+  const [filterSource, setFilterSource] = useState('all');
 
   const activeGuideChannel = channels.find((c) => c.id === selectedGuideChannelId) || channels[0];
   const activeStreamKey = activeGuideChannel?.slug || 'coba';
@@ -48,32 +55,114 @@ export default function AdminKelolaTvPage() {
     setSlug(autoSlug);
   };
 
+  // Instant Auto-Thumbnail when Stream URL or Type changes in Add Modal
+  const handleCustomStreamUrlChange = (val: string) => {
+    setCustomStreamUrl(val);
+    const ytThumb = getYouTubeThumbnail(val);
+    if (ytThumb) {
+      setThumbnail(ytThumb);
+    }
+  };
+
+  const handleStreamTypeChange = (type: 'hls' | 'youtube') => {
+    setStreamType(type);
+    if (type === 'youtube' && customStreamUrl) {
+      const ytThumb = getYouTubeThumbnail(customStreamUrl);
+      if (ytThumb) {
+        setThumbnail(ytThumb);
+      }
+    }
+  };
+
+  const handleAutoFetchYoutubeThumbnailAdd = () => {
+    if (!customStreamUrl) {
+      alert('Silakan masukkan URL / Link YouTube terlebih dahulu.');
+      return;
+    }
+    const ytThumb = getYouTubeThumbnail(customStreamUrl);
+    if (ytThumb) {
+      setThumbnail(ytThumb);
+    } else {
+      alert('Tidak dapat mendeteksi ID Video YouTube dari URL yang dimasukkan.');
+    }
+  };
+
+  // Instant Auto-Thumbnail when YouTube URL or Type changes in Edit Modal
+  const handleEditYoutubeUrlChange = (val: string) => {
+    if (!editingChannel) return;
+    const ytThumb = getYouTubeThumbnail(val);
+    setEditingChannel({
+      ...editingChannel,
+      youtubeUrl: val,
+      ...(ytThumb ? { thumbnail: ytThumb } : {})
+    });
+  };
+
+  const handleEditActiveSourceChange = (src: 'hls' | 'youtube') => {
+    if (!editingChannel) return;
+    let newThumb = editingChannel.thumbnail;
+    if (src === 'youtube' && editingChannel.youtubeUrl) {
+      const ytThumb = getYouTubeThumbnail(editingChannel.youtubeUrl);
+      if (ytThumb) newThumb = ytThumb;
+    }
+    setEditingChannel({
+      ...editingChannel,
+      activeSource: src,
+      thumbnail: newThumb,
+    });
+  };
+
+  const handleAutoFetchYoutubeThumbnailEdit = () => {
+    if (!editingChannel) return;
+    const url = editingChannel.youtubeUrl || editingChannel.hlsUrl;
+    const ytThumb = getYouTubeThumbnail(url);
+    if (ytThumb) {
+      setEditingChannel({ ...editingChannel, thumbnail: ytThumb });
+    } else {
+      alert('Tidak dapat mendeteksi ID Video YouTube dari URL.');
+    }
+  };
+
   // Handle local image file upload for Add Modal
-  const handleAddFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAddFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      if (typeof reader.result === 'string') {
-        setThumbnail(reader.result);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', 'channel');
+      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (res.ok && data.success && data.url) {
+        setThumbnail(data.url);
+      } else {
+        alert(data.error || 'Gagal upload thumbnail channel.');
       }
-    };
-    reader.readAsDataURL(file);
+    } catch (err: any) {
+      alert('Gagal upload thumbnail: ' + (err?.message || 'Error'));
+    }
   };
 
   // Handle local image file upload for Edit Modal
-  const handleEditFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleEditFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !editingChannel) return;
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      if (typeof reader.result === 'string') {
-        setEditingChannel({ ...editingChannel, thumbnail: reader.result });
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', 'channel');
+      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (res.ok && data.success && data.url) {
+        setEditingChannel({ ...editingChannel, thumbnail: data.url });
+      } else {
+        alert(data.error || 'Gagal upload thumbnail channel.');
       }
-    };
-    reader.readAsDataURL(file);
+    } catch (err: any) {
+      alert('Gagal upload thumbnail: ' + (err?.message || 'Error'));
+    }
   };
 
   const copyToClipboard = (text: string, label: string) => {
@@ -98,6 +187,15 @@ export default function AdminKelolaTvPage() {
       ? customStreamUrl
       : 'https://www.youtube.com/embed/live_stream?channel=UC_rtm_live_official';
 
+    // If thumbnail is empty and youtube URL provided, auto extract
+    let finalThumbnail = thumbnail;
+    if (!finalThumbnail && streamType === 'youtube' && customStreamUrl) {
+      finalThumbnail = getYouTubeThumbnail(customStreamUrl) || '';
+    }
+    if (!finalThumbnail) {
+      finalThumbnail = 'https://images.unsplash.com/photo-1594909122845-11baa439b7bf?w=600&auto=format&fit=crop&q=60';
+    }
+
     addChannel({
       name: title,
       slug,
@@ -105,7 +203,7 @@ export default function AdminKelolaTvPage() {
       hlsUrl: finalHlsUrl,
       youtubeUrl: finalYoutubeUrl,
       activeSource: streamType,
-      thumbnail: thumbnail || 'https://images.unsplash.com/photo-1594909122845-11baa439b7bf?w=600&auto=format&fit=crop&q=60',
+      thumbnail: finalThumbnail,
       currentProgram: description || `Siaran TV RTM (${title})`,
       enabled: true,
       autoRecord: autoRecord,
@@ -567,199 +665,341 @@ export default function AdminKelolaTvPage() {
 
       </div>
 
-      {/* Channels Table */}
-      <div className="rounded-2xl border border-white/5 bg-[#121212] overflow-hidden shadow-2xl">
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs text-left font-sans min-w-[900px]">
-            <thead className="bg-black/60 text-neutral-400 uppercase font-mono text-[10px] border-b border-white/5">
-              <tr>
-                <th className="py-3.5 px-4 w-72">Preview & Info Channel</th>
-                <th className="py-3.5 px-4 w-48">Kategori</th>
-                <th className="py-3.5 px-4">OBS Stream Key & URL Web</th>
-                <th className="py-3.5 px-4 w-40">Tipe & Status</th>
-                <th className="py-3.5 px-4 text-right w-44">Aksi</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5">
-              {channels.map((chan) => {
-                const isHeroPinned = pinnedId === chan.id;
-                const isGuideSelected = activeGuideChannel?.id === chan.id;
-                const chanObsKey = chan.slug;
-                const chanHlsUrl = chan.hlsUrl;
+      {/* Filter & Search Bar for Channels */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#121212] p-4 rounded-2xl border border-white/5 shadow-xl font-sans">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3.5 top-3 w-4 h-4 text-neutral-500" />
+          <input
+            type="text"
+            placeholder="Cari channel berdasarkan nama, program, atau slug..."
+            value={searchTerm}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="w-full pl-10 pr-4 py-2.5 bg-black/60 border border-white/10 rounded-xl text-xs text-white placeholder:text-neutral-500 focus:outline-none focus:border-[#E50914]"
+          />
+        </div>
 
-                return (
-                  <tr
-                    key={chan.id}
-                    onClick={() => setSelectedGuideChannelId(chan.id)}
-                    className={`transition-colors cursor-pointer ${
-                      isGuideSelected ? 'bg-white/10 border-l-4 border-l-[#E50914]' : 'hover:bg-white/5'
-                    }`}
-                  >
-                    
-                    {/* Channel Info */}
-                    <td className="py-3.5 px-4">
-                      <div className="flex items-center gap-3">
-                        <img
-                          src={chan.thumbnail}
-                          alt={chan.name}
-                          className="w-14 h-9 object-cover rounded-lg border border-white/10 shrink-0"
-                        />
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="font-bold text-white text-xs truncate">{chan.name}</span>
-                            {isGuideSelected && (
-                              <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-white/20 text-white uppercase font-mono border border-white/20">
-                                ACTIVE GUIDE
-                              </span>
-                            )}
-                            {isHeroPinned && (
-                              <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-[#E50914] text-white uppercase font-mono whitespace-nowrap">
-                                HERO
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-[11px] text-[#A3A3A3] font-sans block mt-0.5 truncate max-w-[200px]" title={chan.currentProgram}>
-                            {chan.currentProgram}
-                          </span>
-                        </div>
-                      </div>
-                    </td>
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          {/* Category Filter */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] text-neutral-400 font-mono hidden md:inline">Kategori:</span>
+            <select
+              value={filterCategory}
+              onChange={(e) => {
+                setFilterCategory(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="px-3 py-2 bg-black/60 border border-white/10 rounded-xl text-white font-medium text-xs focus:outline-none focus:border-[#E50914] cursor-pointer"
+            >
+              <option value="all">Semua Kategori</option>
+              {categories.map((cat, idx) => (
+                <option key={idx} value={cat}>
+                  {cat}
+                </option>
+              ))}
+            </select>
+          </div>
 
-                    {/* Category */}
-                    <td className="py-3.5 px-4 whitespace-nowrap">
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white/5 border border-white/10 text-white font-medium text-[11px]">
-                        <Layers className="w-3 h-3 text-[#E50914]" />
-                        <span>{chan.category || 'Tanpa Kategori'}</span>
-                      </span>
-                    </td>
-
-                    {/* OBS Stream Key & Web URL */}
-                    <td className="py-3.5 px-4 font-mono">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-[#737373] font-bold uppercase">OBS Key:</span>
-                          <span className="bg-black/80 px-2 py-0.5 rounded border border-[#E50914]/40 text-[#E50914] font-bold text-xs">
-                            {chanObsKey}
-                          </span>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              copyToClipboard(chanObsKey, `key-${chan.id}`);
-                            }}
-                            className="p-1 text-neutral-400 hover:text-white transition-colors cursor-pointer"
-                            title="Salin Stream Key OBS"
-                          >
-                            {copiedKey === `key-${chan.id}` ? <Check className="w-3.5 h-3.5 text-[#E50914]" /> : <Copy className="w-3.5 h-3.5" />}
-                          </button>
-                        </div>
-
-                        <div className="flex items-center gap-2 text-[10px] text-[#A3A3A3]">
-                          <span className="text-[#737373] font-bold uppercase">Web HLS:</span>
-                          <span className="text-white truncate max-w-[220px]">{chanHlsUrl}</span>
-                        </div>
-                      </div>
-                    </td>
-
-                    {/* Type & Status */}
-                    <td className="py-3.5 px-4 font-mono whitespace-nowrap">
-                      <div className="space-y-1.5" onClick={(e) => e.stopPropagation()}>
-                        <select
-                          value={chan.activeSource || 'hls'}
-                          onChange={(e) => toggleChannelSource(chan.id, e.target.value as any)}
-                          className={`px-2.5 py-1 rounded text-[10px] font-bold uppercase border focus:outline-none cursor-pointer ${
-                            chan.activeSource === 'hls'
-                              ? 'bg-[#E50914] text-white border-[#E50914]'
-                              : chan.activeSource === 'playlist'
-                              ? 'bg-amber-600 text-white border-amber-500'
-                              : chan.activeSource === 'recording'
-                              ? 'bg-emerald-600 text-white border-emerald-500'
-                              : 'bg-blue-600 text-white border-blue-500'
-                          }`}
-                        >
-                          <option value="hls">🔴 Live Ingest OBS</option>
-                          <option value="playlist">🎬 Playlist 24/7 MP4</option>
-                          <option value="recording">📹 Hasil Rekaman VOD</option>
-                          <option value="youtube">📺 YouTube Embed</option>
-                        </select>
-
-                        {chan.activeSource === 'recording' && (
-                          <select
-                            value={chan.selectedRecordingUrl || chan.recordedPlaybackUrl || ''}
-                            onChange={(e) => toggleChannelSource(chan.id, 'recording', e.target.value)}
-                            className="block max-w-[170px] text-[9px] bg-black/90 border border-emerald-500/40 text-emerald-300 rounded px-1.5 py-1 font-mono focus:outline-none truncate"
-                          >
-                            <option value="">-- Pilih File Rekaman --</option>
-                            {(channelRecordings[chan.slug] || []).map((rec) => (
-                              <option key={rec.id} value={rec.playbackUrl}>
-                                {rec.recordedAt || rec.filename}
-                              </option>
-                            ))}
-                          </select>
-                        )}
-                      </div>
-                    </td>
-
-                    {/* Actions */}
-                    <td className="py-3.5 px-4 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center justify-end gap-1.5">
-                        
-                        {/* Playlist MP4 Button */}
-                        <button
-                          onClick={() => setPlaylistModalChannel(chan)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#E50914]/20 hover:bg-[#E50914] text-white font-bold text-[10px] border border-[#E50914]/40 transition-all cursor-pointer shrink-0"
-                          title="Upload & Kelola Playlist MP4 24 Jam"
-                        >
-                          <Film className="w-3.5 h-3.5 text-[#E50914] group-hover:text-white" />
-                          <span>Playlist MP4</span>
-                        </button>
-
-                        {/* Edit Channel Button */}
-                        <button
-                          onClick={() => setEditingChannel(chan)}
-                          className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white font-bold transition-all border border-white/10 cursor-pointer"
-                          title="Edit Title, Kategori, & Stream"
-                        >
-                          <Edit2 className="w-3.5 h-3.5 text-white" />
-                        </button>
-
-                        {/* Pin Button */}
-                        <button
-                          onClick={() => setPinnedId(isHeroPinned ? null : chan.id)}
-                          className={`p-2 rounded-lg text-xs font-semibold transition-all border cursor-pointer ${
-                            isHeroPinned
-                              ? 'bg-[#E50914] text-white border-[#E50914]'
-                              : 'bg-white/5 text-neutral-400 hover:text-white border-white/10'
-                          }`}
-                          title={isHeroPinned ? 'Tersemat di Hero Banner' : 'Sematkan ke Hero Banner'}
-                        >
-                          <Pin className="w-3.5 h-3.5" />
-                        </button>
-
-                        {/* Switch HLS / YouTube */}
-                        <button
-                          onClick={() => toggleChannelSource(chan.id, chan.activeSource === 'hls' ? 'youtube' : 'hls')}
-                          className="px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white font-bold text-[10px] border border-white/10 transition-all cursor-pointer"
-                        >
-                          {chan.activeSource === 'hls' ? 'YouTube' : 'HLS'}
-                        </button>
-
-                        {/* Delete */}
-                        <button
-                          onClick={() => setDeleteConfirmChannel(chan)}
-                          className="p-2 rounded-lg bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white transition-all border border-red-500/20 cursor-pointer"
-                          title="Hapus Channel"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          {/* Source Filter */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] text-neutral-400 font-mono hidden md:inline">Sumber:</span>
+            <select
+              value={filterSource}
+              onChange={(e) => {
+                setFilterSource(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="px-3 py-2 bg-black/60 border border-white/10 rounded-xl text-white font-medium text-xs focus:outline-none focus:border-[#E50914] cursor-pointer"
+            >
+              <option value="all">Semua Sumber</option>
+              <option value="hls">🔴 Ingest OBS</option>
+              <option value="youtube">📺 YouTube Embed</option>
+              <option value="playlist">🎬 Playlist MP4</option>
+              <option value="recording">📹 Rekaman VOD</option>
+              <option value="off">⛔ OFF</option>
+            </select>
+          </div>
         </div>
       </div>
+
+      {/* Channels Table */}
+      {(() => {
+        const filteredChannels = channels.filter((chan) => {
+          const matchesSearch = !searchTerm ||
+            chan.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            chan.slug.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (chan.currentProgram && chan.currentProgram.toLowerCase().includes(searchTerm.toLowerCase()));
+          const matchesCategory = filterCategory === 'all' || (chan.category || 'Tanpa Kategori').toLowerCase() === filterCategory.toLowerCase();
+          const matchesSource = filterSource === 'all' || chan.activeSource === filterSource;
+          return matchesSearch && matchesCategory && matchesSource;
+        });
+
+        const totalPages = Math.ceil(filteredChannels.length / itemsPerPage) || 1;
+        const safeCurrentPage = Math.min(Math.max(currentPage, 1), totalPages);
+        const startIndex = (safeCurrentPage - 1) * itemsPerPage;
+        const paginatedChannels = filteredChannels.slice(startIndex, startIndex + itemsPerPage);
+
+        return (
+          <div className="rounded-2xl border border-white/5 bg-[#121212] overflow-hidden shadow-2xl space-y-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left font-sans min-w-[900px]">
+                <thead className="bg-black/60 text-neutral-400 uppercase font-mono text-[10px] border-b border-white/5">
+                  <tr>
+                    <th className="py-3.5 px-4 w-80">Preview & Info Channel</th>
+                    <th className="py-3.5 px-4 w-44">Kategori</th>
+                    <th className="py-3.5 px-4">OBS Stream Key & URL Web</th>
+                    <th className="py-3.5 px-4 w-44">Tipe & Status</th>
+                    <th className="py-3.5 px-4 text-right w-44">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/5">
+                  {paginatedChannels.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="py-12 text-center text-neutral-500 font-sans">
+                        <Tv className="w-8 h-8 mx-auto mb-2 text-neutral-600 animate-pulse" />
+                        <p className="font-semibold text-white text-xs">Tidak ada saluran TV yang sesuai filter</p>
+                        <p className="text-[11px] text-neutral-400 mt-1">Coba ubah kata kunci pencarian atau filter kategori.</p>
+                      </td>
+                    </tr>
+                  ) : (
+                    paginatedChannels.map((chan) => {
+                      const isHeroPinned = siteSettings?.pinnedHeroChannelId === chan.id;
+                      const isGuideSelected = activeGuideChannel?.id === chan.id;
+                      const chanObsKey = chan.slug;
+                      const chanHlsUrl = chan.hlsUrl;
+
+                      return (
+                        <tr
+                          key={chan.id}
+                          onClick={() => setSelectedGuideChannelId(chan.id)}
+                          className={`transition-colors cursor-pointer ${
+                            isGuideSelected ? 'bg-white/10 border-l-4 border-l-[#E50914]' : 'hover:bg-white/5'
+                          }`}
+                        >
+                          
+                          {/* Channel Info with Wrap Text */}
+                          <td className="py-3.5 px-4 max-w-xs sm:max-w-sm">
+                            <div className="flex items-start gap-3">
+                              <img
+                                src={chan.thumbnail}
+                                alt={chan.name}
+                                className="w-14 h-9 object-cover rounded-lg border border-white/10 shrink-0 mt-0.5"
+                              />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                                  <span className="font-bold text-white text-xs break-words whitespace-normal leading-snug">{chan.name}</span>
+                                  {isGuideSelected && (
+                                    <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-white/20 text-white uppercase font-mono border border-white/20 shrink-0">
+                                      ACTIVE GUIDE
+                                    </span>
+                                  )}
+                                  {isHeroPinned && (
+                                    <span className="px-1.5 py-0.5 rounded text-[8px] font-bold bg-[#E50914] text-white uppercase font-mono whitespace-nowrap shrink-0">
+                                      HERO
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="text-[11px] text-[#A3A3A3] font-sans block break-words whitespace-normal leading-snug" title={chan.currentProgram}>
+                                  {chan.currentProgram}
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Category */}
+                          <td className="py-3.5 px-4 whitespace-nowrap">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white/5 border border-white/10 text-white font-medium text-[11px]">
+                              <Layers className="w-3 h-3 text-[#E50914]" />
+                              <span>{chan.category || 'Tanpa Kategori'}</span>
+                            </span>
+                          </td>
+
+                          {/* OBS Stream Key & Web URL */}
+                          <td className="py-3.5 px-4 font-mono">
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] text-[#737373] font-bold uppercase">OBS Key:</span>
+                                <span className="bg-black/80 px-2 py-0.5 rounded border border-[#E50914]/40 text-[#E50914] font-bold text-xs">
+                                  {chanObsKey}
+                                </span>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    copyToClipboard(chanObsKey, `key-${chan.id}`);
+                                  }}
+                                  className="p-1 text-neutral-400 hover:text-white transition-colors cursor-pointer"
+                                  title="Salin Stream Key OBS"
+                                >
+                                  {copiedKey === `key-${chan.id}` ? <Check className="w-3.5 h-3.5 text-[#E50914]" /> : <Copy className="w-3.5 h-3.5" />}
+                                </button>
+                              </div>
+
+                              <div className="flex items-center gap-2 text-[10px] text-[#A3A3A3]">
+                                <span className="text-[#737373] font-bold uppercase">Web HLS:</span>
+                                <span className="text-white truncate max-w-[220px]">{chanHlsUrl}</span>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Type & Status */}
+                          <td className="py-3.5 px-4 font-mono whitespace-nowrap">
+                            <div className="space-y-1.5" onClick={(e) => e.stopPropagation()}>
+                              <select
+                                value={chan.activeSource || 'hls'}
+                                onChange={(e) => toggleChannelSource(chan.id, e.target.value as any)}
+                                className={`px-2.5 py-1 rounded text-[10px] font-bold uppercase border focus:outline-none cursor-pointer ${
+                                  chan.activeSource === 'hls'
+                                    ? 'bg-[#E50914] text-white border-[#E50914]'
+                                    : chan.activeSource === 'playlist'
+                                    ? 'bg-amber-600 text-white border-amber-500'
+                                    : chan.activeSource === 'recording'
+                                    ? 'bg-emerald-600 text-white border-emerald-500'
+                                    : chan.activeSource === 'youtube'
+                                    ? 'bg-blue-600 text-white border-blue-500'
+                                    : 'bg-neutral-800 text-neutral-400 border-neutral-700'
+                                }`}
+                              >
+                                <option value="hls">🔴 Live Ingest OBS</option>
+                                <option value="playlist">🎬 Playlist 24/7 MP4</option>
+                                <option value="recording">📹 Hasil Rekaman VOD</option>
+                                <option value="youtube">📺 YouTube Embed</option>
+                                <option value="off">⛔ Siaran OFF</option>
+                              </select>
+
+                              {chan.activeSource === 'recording' && (
+                                <select
+                                  value={chan.selectedRecordingUrl || chan.recordedPlaybackUrl || ''}
+                                  onChange={(e) => toggleChannelSource(chan.id, 'recording', e.target.value)}
+                                  className="block max-w-[170px] text-[9px] bg-black/90 border border-emerald-500/40 text-emerald-300 rounded px-1.5 py-1 font-mono focus:outline-none truncate"
+                                >
+                                  <option value="">-- Pilih File Rekaman --</option>
+                                  {(channelRecordings[chan.slug] || []).map((rec) => (
+                                    <option key={rec.id} value={rec.playbackUrl}>
+                                      {rec.recordedAt || rec.filename}
+                                    </option>
+                                  ))}
+                                </select>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* Actions */}
+                          <td className="py-3.5 px-4 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-end gap-1.5">
+                              
+                              {/* Playlist MP4 Button */}
+                              <button
+                                onClick={() => setPlaylistModalChannel(chan)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#E50914]/20 hover:bg-[#E50914] text-white font-bold text-[10px] border border-[#E50914]/40 transition-all cursor-pointer shrink-0"
+                                title="Upload & Kelola Playlist MP4 24 Jam"
+                              >
+                                <Film className="w-3.5 h-3.5 text-[#E50914] group-hover:text-white" />
+                                <span>Playlist MP4</span>
+                              </button>
+
+                              {/* Edit Channel Button */}
+                              <button
+                                onClick={() => setEditingChannel(chan)}
+                                className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white font-bold transition-all border border-white/10 cursor-pointer"
+                                title="Edit Title, Kategori, & Stream"
+                              >
+                                <Edit2 className="w-3.5 h-3.5 text-white" />
+                              </button>
+
+                              {/* Pin Button */}
+                              <button
+                                onClick={() => updateSiteSettings({ pinnedHeroChannelId: isHeroPinned ? '' : chan.id })}
+                                className={`p-2 rounded-lg text-xs font-semibold transition-all border cursor-pointer ${
+                                  isHeroPinned
+                                    ? 'bg-[#E50914] text-white border-[#E50914]'
+                                    : 'bg-white/5 text-neutral-400 hover:text-white border-white/10'
+                                }`}
+                                title={isHeroPinned ? 'Tersemat di Hero Banner' : 'Sematkan ke Hero Banner'}
+                              >
+                                <Pin className="w-3.5 h-3.5" />
+                              </button>
+
+                              {/* Switch HLS / YouTube */}
+                              <button
+                                onClick={() => toggleChannelSource(chan.id, chan.activeSource === 'hls' ? 'youtube' : 'hls')}
+                                className="px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white font-bold text-[10px] border border-white/10 transition-all cursor-pointer"
+                              >
+                                {chan.activeSource === 'hls' ? 'YouTube' : 'HLS'}
+                              </button>
+
+                              {/* Delete */}
+                              <button
+                                onClick={() => setDeleteConfirmChannel(chan)}
+                                className="p-2 rounded-lg bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white transition-all border border-red-500/20 cursor-pointer"
+                                title="Hapus Channel"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* PageNavi / Pagination Controls */}
+            {filteredChannels.length > 0 && (
+              <div className="p-4 bg-black/40 border-t border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-sans">
+                <span className="text-neutral-400 font-mono text-[11px]">
+                  Menampilkan <strong className="text-white">{startIndex + 1}</strong> - <strong className="text-white">{Math.min(startIndex + itemsPerPage, filteredChannels.length)}</strong> dari total <strong className="text-white">{filteredChannels.length}</strong> channel
+                </span>
+
+                {totalPages > 1 && (
+                  <div className="flex items-center gap-1.5">
+                    {/* Previous Button */}
+                    <button
+                      disabled={safeCurrentPage === 1}
+                      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                      className="px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-neutral-300 disabled:opacity-30 disabled:cursor-not-allowed border border-white/10 transition-all flex items-center gap-1 cursor-pointer"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Sebelumnya</span>
+                    </button>
+
+                    {/* Page Numbers */}
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => {
+                      const isActive = pageNum === safeCurrentPage;
+                      return (
+                        <button
+                          key={pageNum}
+                          onClick={() => setCurrentPage(pageNum)}
+                          className={`w-8 h-8 rounded-lg font-mono font-bold text-xs transition-all border cursor-pointer ${
+                            isActive
+                              ? 'bg-[#E50914] text-white border-[#E50914] shadow-md shadow-red-900/40'
+                              : 'bg-white/5 text-neutral-400 hover:text-white border-white/10 hover:bg-white/10'
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
+
+                    {/* Next Button */}
+                    <button
+                      disabled={safeCurrentPage === totalPages}
+                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                      className="px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-neutral-300 disabled:opacity-30 disabled:cursor-not-allowed border border-white/10 transition-all flex items-center gap-1 cursor-pointer"
+                    >
+                      <span className="hidden sm:inline">Selanjutnya</span>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* EDIT CHANNEL MODAL */}
       {editingChannel && (
@@ -836,7 +1076,7 @@ export default function AdminKelolaTvPage() {
                 <label className="block font-bold text-neutral-300 mb-1">Tipe Source Stream</label>
                 <select
                   value={editingChannel.activeSource}
-                  onChange={(e) => setEditingChannel({ ...editingChannel, activeSource: e.target.value as 'hls' | 'youtube' })}
+                  onChange={(e) => handleEditActiveSourceChange(e.target.value as 'hls' | 'youtube')}
                   className="w-full p-3 bg-black/60 border border-white/10 rounded-xl text-white font-bold font-mono focus:border-[#E50914] focus:outline-none"
                 >
                   <option value="hls">🔴 Live VPS MediaMTX Stream (Auto OBS Ingest)</option>
@@ -858,12 +1098,23 @@ export default function AdminKelolaTvPage() {
 
               {/* YouTube Embed URL */}
               <div>
-                <label className="block font-bold text-neutral-300 mb-1 font-mono">YouTube Embed URL</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-bold text-neutral-300 font-mono">YouTube Embed URL</label>
+                  <button
+                    type="button"
+                    onClick={handleAutoFetchYoutubeThumbnailEdit}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-[#E50914] hover:underline cursor-pointer"
+                  >
+                    <Zap className="w-3.5 h-3.5" />
+                    <span>Auto Thumbnail dari YT</span>
+                  </button>
+                </div>
                 <input
                   type="text"
                   required
+                  placeholder="https://www.youtube.com/watch?v=... atau embed"
                   value={editingChannel.youtubeUrl}
-                  onChange={(e) => setEditingChannel({ ...editingChannel, youtubeUrl: e.target.value })}
+                  onChange={(e) => handleEditYoutubeUrlChange(e.target.value)}
                   className="w-full p-3 bg-black/60 border border-white/10 rounded-xl text-white font-mono focus:border-[#E50914] focus:outline-none"
                 />
               </div>
@@ -881,10 +1132,22 @@ export default function AdminKelolaTvPage() {
 
               {/* Thumbnail Upload & URL Input */}
               <div className="space-y-3 p-4 bg-black/40 rounded-2xl border border-white/10">
-                <label className="block font-bold text-neutral-200 flex items-center gap-1.5">
-                  <ImageIcon className="w-4 h-4 text-[#E50914]" />
-                  <span>Thumbnail Gambar Channel</span>
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-neutral-200 flex items-center gap-1.5">
+                    <ImageIcon className="w-4 h-4 text-[#E50914]" />
+                    <span>Thumbnail Gambar Channel</span>
+                  </label>
+                  {editingChannel.youtubeUrl && (
+                    <button
+                      type="button"
+                      onClick={handleAutoFetchYoutubeThumbnailEdit}
+                      className="px-2.5 py-1 rounded-lg bg-[#E50914]/20 hover:bg-[#E50914] text-[#E50914] hover:text-white border border-[#E50914]/40 font-bold text-[10px] transition-all flex items-center gap-1 cursor-pointer"
+                    >
+                      <Zap className="w-3 h-3" />
+                      <span>Ambil dari Link YouTube</span>
+                    </button>
+                  )}
+                </div>
 
                 {/* Option 1: File Upload */}
                 <div>
@@ -1052,7 +1315,7 @@ export default function AdminKelolaTvPage() {
                 <label className="block font-bold text-neutral-300 mb-1">Tipe Source Stream</label>
                 <select
                   value={streamType}
-                  onChange={(e) => setStreamType(e.target.value as 'hls' | 'youtube')}
+                  onChange={(e) => handleStreamTypeChange(e.target.value as 'hls' | 'youtube')}
                   className="w-full p-3 bg-black/60 border border-white/10 rounded-xl text-white font-bold font-mono focus:border-[#E50914] focus:outline-none"
                 >
                   <option value="hls">🔴 Live VPS MediaMTX Stream (Auto OBS Ingest)</option>
@@ -1119,13 +1382,23 @@ export default function AdminKelolaTvPage() {
 
               {streamType === 'youtube' && (
                 <div>
-                  <label className="block font-bold text-neutral-300 mb-1 font-mono">YouTube Embed URL</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="font-bold text-neutral-300 font-mono">YouTube Embed URL</label>
+                    <button
+                      type="button"
+                      onClick={handleAutoFetchYoutubeThumbnailAdd}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-[#E50914] hover:underline cursor-pointer"
+                    >
+                      <Zap className="w-3.5 h-3.5" />
+                      <span>Auto Thumbnail dari YT</span>
+                    </button>
+                  </div>
                   <input
                     type="text"
                     required
-                    placeholder="https://www.youtube.com/embed/..."
+                    placeholder="https://www.youtube.com/watch?v=... atau embed"
                     value={customStreamUrl}
-                    onChange={(e) => setCustomStreamUrl(e.target.value)}
+                    onChange={(e) => handleCustomStreamUrlChange(e.target.value)}
                     className="w-full p-3 bg-black/60 border border-white/10 rounded-xl text-white font-mono focus:border-[#E50914] focus:outline-none"
                   />
                 </div>
@@ -1145,10 +1418,22 @@ export default function AdminKelolaTvPage() {
 
               {/* Thumbnail Upload & URL Input */}
               <div className="space-y-3 p-4 bg-black/40 rounded-2xl border border-white/10">
-                <label className="block font-bold text-neutral-200 flex items-center gap-1.5">
-                  <ImageIcon className="w-4 h-4 text-[#E50914]" />
-                  <span>Thumbnail Gambar Channel</span>
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-neutral-200 flex items-center gap-1.5">
+                    <ImageIcon className="w-4 h-4 text-[#E50914]" />
+                    <span>Thumbnail Gambar Channel</span>
+                  </label>
+                  {customStreamUrl && (
+                    <button
+                      type="button"
+                      onClick={handleAutoFetchYoutubeThumbnailAdd}
+                      className="px-2.5 py-1 rounded-lg bg-[#E50914]/20 hover:bg-[#E50914] text-[#E50914] hover:text-white border border-[#E50914]/40 font-bold text-[10px] transition-all flex items-center gap-1 cursor-pointer"
+                    >
+                      <Zap className="w-3 h-3" />
+                      <span>Ambil dari Link YouTube</span>
+                    </button>
+                  )}
+                </div>
 
                 {/* Option 1: File Upload */}
                 <div>
@@ -1173,7 +1458,7 @@ export default function AdminKelolaTvPage() {
                 <div>
                   <input
                     type="text"
-                    placeholder="https://images.unsplash.com/..."
+                    placeholder="https://images.unsplash.com/... atau https://img.youtube.com/..."
                     value={thumbnail}
                     onChange={(e) => setThumbnail(e.target.value)}
                     className="w-full p-2.5 bg-black/60 border border-white/10 rounded-xl text-white text-xs focus:border-[#E50914] focus:outline-none"

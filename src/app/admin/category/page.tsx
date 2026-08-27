@@ -2,7 +2,7 @@
 
 import React, { useState, useRef } from 'react';
 import { useStreamContext, CategoryItem } from '@/context/StreamContext';
-import { Layers, Plus, Search, Trash2, X, AlertTriangle, Edit, Upload, Image as ImageIcon } from 'lucide-react';
+import { Layers, Plus, Search, Trash2, X, AlertTriangle, Edit, Upload, Image as ImageIcon, CheckCircle2, Loader2 } from 'lucide-react';
 
 const categoryBgs: Record<string, string> = {
   'TV On Demand': 'https://images.unsplash.com/photo-1585829365295-ab7cd400c167?w=500&auto=format&fit=crop&q=80',
@@ -22,16 +22,25 @@ export default function AdminCategoryPage() {
   const [editingCategory, setEditingCategory] = useState<CategoryItem | null>(null);
   const [deleteConfirmCategory, setDeleteConfirmCategory] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   
   // Form State
   const [name, setName] = useState('');
   const [image, setImage] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3500);
+  };
+
   const openAddModal = () => {
     setEditingCategory(null);
     setName('');
     setImage('');
+    setErrorMessage(null);
     setIsModalOpen(true);
   };
 
@@ -39,46 +48,101 @@ export default function AdminCategoryPage() {
     setEditingCategory(catObj);
     setName(catObj.name);
     setImage(catObj.image || '');
+    setErrorMessage(null);
     setIsModalOpen(true);
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          setImage(event.target.result as string);
-        }
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+
+    try {
+      setIsUploading(true);
+      setErrorMessage(null);
+
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', 'category');
+
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success && data.url) {
+        setImage(data.url);
+        showToast('✓ Gambar kategori berhasil diupload!');
+      } else {
+        setErrorMessage(data.error || 'Gagal mengupload gambar ke server.');
+      }
+    } catch (err: any) {
+      setErrorMessage('Terjadi kesalahan saat mengupload gambar: ' + (err?.message || 'Koneksi terputus'));
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
-
-    if (editingCategory) {
-      updateCategory(editingCategory.name, name.trim(), image.trim());
-    } else {
-      addCategory(name.trim(), image.trim());
+    const cleanName = name.trim();
+    if (!cleanName) {
+      setErrorMessage('Nama kategori wajib diisi.');
+      return;
     }
 
-    setName('');
-    setImage('');
-    setEditingCategory(null);
-    setIsModalOpen(false);
+    try {
+      if (editingCategory) {
+        updateCategory(editingCategory.name, cleanName, image.trim());
+        showToast(`✓ Kategori "${cleanName}" berhasil diperbarui!`);
+      } else {
+        // Check duplicate
+        if (categories.some(c => c.toLowerCase() === cleanName.toLowerCase())) {
+          setErrorMessage(`Kategori "${cleanName}" sudah ada.`);
+          return;
+        }
+        addCategory(cleanName, image.trim());
+        showToast(`✓ Kategori baru "${cleanName}" berhasil ditambahkan!`);
+      }
+
+      setName('');
+      setImage('');
+      setEditingCategory(null);
+      setIsModalOpen(false);
+    } catch (err: any) {
+      setErrorMessage('Gagal menyimpan kategori: ' + (err?.message || 'Error'));
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteConfirmCategory) return;
+    try {
+      setIsDeleting(true);
+      deleteCategory(deleteConfirmCategory);
+      showToast(`✓ Kategori "${deleteConfirmCategory}" berhasil dihapus.`);
+    } finally {
+      setIsDeleting(false);
+      setDeleteConfirmCategory(null);
+    }
   };
 
   const filteredObjects = (categoryObjects && categoryObjects.length > 0
     ? categoryObjects
-    : categories.map(c => ({ id: c, name: c, image: '' }))
+    : categories.map(c => ({ id: `cat-${c.toLowerCase().replace(/\s+/g, '-')}`, name: c, image: '' }))
   ).filter(cat => cat.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
   return (
     <div className="space-y-6 font-sans selection:bg-[#E50914] selection:text-white">
       
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed top-6 right-6 z-50 p-4 rounded-2xl bg-emerald-950/90 border border-emerald-500/40 text-emerald-300 text-xs font-bold shadow-2xl flex items-center gap-2.5 animate-in fade-in slide-in-from-top-3 backdrop-blur-md">
+          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/5 pb-5">
         <div>
@@ -117,15 +181,18 @@ export default function AdminCategoryPage() {
           const catName = catObj.name;
           const count = channels.filter((c) => (c.category || 'TV On Demand') === catName).length;
           const bg = catObj.image || categoryBgs[catName] || DEFAULT_CAT_BG;
-          const slug = catName.toLowerCase().trim().replace(/\s+/g, '-');
+          const slug = catName.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-');
 
           return (
-            <div key={idx} className="bg-[#121212] rounded-2xl border border-white/5 overflow-hidden group shadow-xl relative">
+            <div key={catObj.id || idx} className="bg-[#121212] rounded-2xl border border-white/5 overflow-hidden group shadow-xl relative transition-all hover:border-white/15">
               <div className="relative h-36 w-full overflow-hidden bg-black">
                 <img
                   src={bg}
                   alt={catName}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 opacity-60"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = DEFAULT_CAT_BG;
+                  }}
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-[#121212] via-transparent to-transparent"></div>
                 
@@ -165,7 +232,7 @@ export default function AdminCategoryPage() {
       {/* ADD / EDIT CATEGORY MODAL */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50">
-          <div className="bg-[#121212] rounded-2xl p-6 max-w-md w-full border border-white/10 shadow-2xl space-y-4 font-sans">
+          <div className="bg-[#121212] rounded-2xl p-6 max-w-md w-full border border-white/10 shadow-2xl space-y-4 font-sans animate-in zoom-in-95">
             
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <h3 className="font-bold text-white text-base flex items-center gap-2">
@@ -176,6 +243,13 @@ export default function AdminCategoryPage() {
                 <X className="w-5 h-5" />
               </button>
             </div>
+
+            {errorMessage && (
+              <div className="p-3 bg-red-950/80 border border-red-500/40 rounded-xl text-red-300 text-xs font-semibold flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+                <span>{errorMessage}</span>
+              </div>
+            )}
 
             <form onSubmit={handleSubmit} className="space-y-4 text-xs font-sans">
               
@@ -204,16 +278,30 @@ export default function AdminCategoryPage() {
                     src={image || categoryBgs[name] || DEFAULT_CAT_BG}
                     alt="Preview Kategori"
                     className="w-full h-full object-cover opacity-80"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = DEFAULT_CAT_BG;
+                    }}
                   />
-                  <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center gap-2 opacity-90 group-hover:opacity-100 transition-opacity">
+                  <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center gap-2 opacity-90 group-hover:opacity-100 transition-opacity">
                     <button
                       type="button"
+                      disabled={isUploading}
                       onClick={() => fileInputRef.current?.click()}
-                      className="px-3 py-1.5 rounded-lg bg-[#E50914] text-white font-bold text-xs hover:bg-red-700 transition-all flex items-center gap-1.5 shadow-lg cursor-pointer"
+                      className="px-3.5 py-2 rounded-xl bg-[#E50914] text-white font-bold text-xs hover:bg-red-700 transition-all flex items-center gap-2 shadow-lg cursor-pointer disabled:opacity-50"
                     >
-                      <Upload className="w-3.5 h-3.5" /> Upload File Gambar
+                      {isUploading ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Mengupload...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-4 h-4" />
+                          <span>Upload File Gambar</span>
+                        </>
+                      )}
                     </button>
-                    <span className="text-[10px] text-neutral-300 font-mono">PNG, JPG, WebP (Max 5MB)</span>
+                    <span className="text-[10px] text-neutral-300 font-mono">PNG, JPG, WebP, SVG (Maks 15MB)</span>
                   </div>
                 </div>
 
@@ -230,7 +318,7 @@ export default function AdminCategoryPage() {
                   <span className="text-[10px] text-neutral-400 font-mono block mb-1">Atau masukkan URL Gambar Kustom:</span>
                   <input
                     type="text"
-                    placeholder="https://images.unsplash.com/photo-..."
+                    placeholder="https://images.unsplash.com/photo-... atau /uploads/..."
                     value={image}
                     onChange={(e) => setImage(e.target.value)}
                     className="w-full p-2.5 bg-black/60 border border-white/10 rounded-xl text-white font-mono text-[11px] focus:border-[#E50914] focus:outline-none"
@@ -249,7 +337,8 @@ export default function AdminCategoryPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-[#E50914] text-white hover:bg-red-700 font-bold shadow-lg shadow-red-900/30 cursor-pointer"
+                  disabled={isUploading}
+                  className="px-5 py-2 rounded-xl bg-[#E50914] text-white hover:bg-red-700 font-bold shadow-lg shadow-red-900/30 cursor-pointer disabled:opacity-50"
                 >
                   {editingCategory ? 'Simpan Perubahan' : 'Simpan Kategori'}
                 </button>
@@ -292,18 +381,13 @@ export default function AdminCategoryPage() {
               </button>
               <button
                 type="button"
-                onClick={async () => {
-                  setIsDeleting(true);
-                  deleteCategory(deleteConfirmCategory);
-                  setIsDeleting(false);
-                  setDeleteConfirmCategory(null);
-                }}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#E50914] hover:bg-red-700 text-white font-extrabold text-xs shadow-lg shadow-red-900/40 cursor-pointer"
+                onClick={handleDelete}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#E50914] hover:bg-red-700 text-white font-extrabold text-xs shadow-lg shadow-red-900/40 cursor-pointer disabled:opacity-50"
                 disabled={isDeleting}
               >
                 {isDeleting ? (
                   <>
-                    <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
+                    <Loader2 className="w-4 h-4 animate-spin" />
                     <span>Menghapus...</span>
                   </>
                 ) : (

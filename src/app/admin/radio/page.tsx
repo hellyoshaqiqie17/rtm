@@ -154,31 +154,45 @@ export default function AdminSiaranCenterPage() {
   };
 
   // Handle local image file upload for Add Modal
-  const handleAddFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAddFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      if (typeof reader.result === 'string') {
-        setThumbnail(reader.result);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', 'radio');
+      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (res.ok && data.success && data.url) {
+        setThumbnail(data.url);
+      } else {
+        alert(data.error || 'Gagal upload thumbnail radio.');
       }
-    };
-    reader.readAsDataURL(file);
+    } catch (err: any) {
+      alert('Gagal upload thumbnail: ' + (err?.message || 'Error'));
+    }
   };
 
   // Handle local image file upload for Edit Modal
-  const handleEditFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleEditFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !editingRadio) return;
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      if (typeof reader.result === 'string') {
-        setEditingRadio({ ...editingRadio, thumbnail: reader.result });
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', 'radio');
+      const res = await fetch('/api/upload', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (res.ok && data.success && data.url) {
+        setEditingRadio({ ...editingRadio, thumbnail: data.url });
+      } else {
+        alert(data.error || 'Gagal upload thumbnail radio.');
       }
-    };
-    reader.readAsDataURL(file);
+    } catch (err: any) {
+      alert('Gagal upload thumbnail: ' + (err?.message || 'Error'));
+    }
   };
 
   const copyToClipboard = (text: string, label: string) => {
@@ -486,24 +500,7 @@ export default function AdminSiaranCenterPage() {
             </div>
           </div>
 
-          {/* Audio Tester Toggle */}
-          <div className="flex items-center gap-3 bg-[#121212] p-2 rounded-xl border border-white/10 shrink-0">
-            <button
-              onClick={togglePreviewPlay}
-              className="w-10 h-10 rounded-lg bg-[#E50914] hover:bg-red-700 text-white flex items-center justify-center shadow-lg transition-all cursor-pointer"
-              title={isPlayingPreview ? 'Hentikan Tes Audio' : 'Putar Tes Audio Siaran'}
-            >
-              {isPlayingPreview ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-0.5" />}
-            </button>
-            <div className="text-left pr-2">
-              <span className="text-xs font-bold text-white block">
-                {isPlayingPreview ? 'Mendengar Siaran Live' : 'Tes Audio Radio'}
-              </span>
-              <span className="text-[10px] text-[#A3A3A3] font-mono font-bold flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#E50914] animate-pulse"></span> {activeStation?.name}
-              </span>
-            </div>
-          </div>
+
         </div>
 
         {/* Credentials Grid */}

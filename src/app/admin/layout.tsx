@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useStreamContext } from '@/context/StreamContext';
@@ -14,7 +14,11 @@ import {
   Sliders,
   LogOut,
   User,
-  Globe
+  Globe,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Menu,
+  X
 } from 'lucide-react';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -22,13 +26,40 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const router = useRouter();
   const { isAdminAuthenticated, logoutAdmin, logoUrl } = useStreamContext();
 
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
+
   const isLoginPage = pathname === '/login' || pathname === '/admin/login';
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('rtm_admin_sidebar_collapsed');
+      if (saved !== null) {
+        setIsSidebarCollapsed(saved === 'true');
+      }
+    } catch (e) {}
+  }, []);
+
+  const toggleSidebar = () => {
+    setIsSidebarCollapsed(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('rtm_admin_sidebar_collapsed', String(next));
+      } catch (e) {}
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (!isLoginPage && !isAdminAuthenticated) {
       router.push('/login');
     }
   }, [isAdminAuthenticated, isLoginPage, router]);
+
+  // Close mobile sidebar on route change
+  useEffect(() => {
+    setIsMobileSidebarOpen(false);
+  }, [pathname]);
 
   if (isLoginPage) {
     return <>{children}</>;
@@ -60,26 +91,63 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <div className="flex min-h-screen bg-[#050505] text-white font-sans selection:bg-[#E50914] selection:text-white">
       
+      {/* Mobile Drawer Backdrop */}
+      {isMobileSidebarOpen && (
+        <div
+          onClick={() => setIsMobileSidebarOpen(false)}
+          className="fixed inset-0 z-40 bg-black/80 backdrop-blur-sm md:hidden"
+        />
+      )}
+
       {/* Sidebar Navigation */}
-      <aside className="w-64 hidden md:flex fixed h-screen z-20 bg-[#0d0d0d] border-r border-white/10 p-5 flex-col justify-between font-sans">
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 md:z-20 bg-[#0d0d0d] border-r border-white/10 flex flex-col justify-between font-sans transition-all duration-300 ease-in-out ${
+          isMobileSidebarOpen ? 'translate-x-0 w-64 p-5' : '-translate-x-full md:translate-x-0'
+        } ${
+          isSidebarCollapsed ? 'md:w-20 md:p-3' : 'md:w-64 md:p-5'
+        }`}
+      >
         <div className="space-y-6">
           
           {/* Admin Header Branding */}
           <div className="flex items-center justify-between border-b border-white/10 pb-4">
-            <Link href="/admin" className="flex items-center gap-2">
-              <img
-                src={logoUrl}
-                alt="RTM MAUBERE"
-                className="h-8 w-auto max-w-[130px] max-h-8 object-contain"
-              />
-            </Link>
-            <span className="px-2 py-0.5 rounded bg-[#E50914] text-white text-[10px] font-bold uppercase tracking-wider font-mono">
-              ADMIN
-            </span>
+            {!isSidebarCollapsed ? (
+              <>
+                <Link href="/admin" className="flex items-center gap-2 overflow-hidden">
+                  <img
+                    src={logoUrl}
+                    alt="RTM MAUBERE"
+                    className="h-8 w-auto max-w-[130px] max-h-8 object-contain"
+                  />
+                </Link>
+                <div className="flex items-center gap-1">
+                  <span className="px-2 py-0.5 rounded bg-[#E50914] text-white text-[10px] font-bold uppercase tracking-wider font-mono">
+                    ADMIN
+                  </span>
+                  <button
+                    onClick={toggleSidebar}
+                    className="hidden md:flex p-1 rounded-lg text-neutral-400 hover:text-white hover:bg-white/10 transition-all cursor-pointer"
+                    title="Sembunyikan Sidebar"
+                  >
+                    <PanelLeftClose className="w-4 h-4 text-neutral-400 hover:text-white" />
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="w-full flex flex-col items-center gap-2">
+                <button
+                  onClick={toggleSidebar}
+                  className="p-2 rounded-xl bg-white/5 hover:bg-[#E50914] text-neutral-300 hover:text-white transition-all cursor-pointer shadow"
+                  title="Tampilkan Sidebar Penuh"
+                >
+                  <PanelLeftOpen className="w-5 h-5 text-[#E50914] group-hover:text-white" />
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Sidebar Nav Items */}
-          <nav className="space-y-1 text-xs font-semibold">
+          <nav className="space-y-1.5 text-xs font-semibold">
             {sidebarLinks.map((item) => {
               const Icon = item.icon;
               const active = isLinkActive(item.path);
@@ -87,14 +155,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 <Link
                   key={item.path}
                   href={item.path}
-                  className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl transition-all duration-200 ${
+                  title={isSidebarCollapsed ? item.name : undefined}
+                  className={`flex items-center gap-3 rounded-xl transition-all duration-200 ${
+                    isSidebarCollapsed ? 'justify-center p-3' : 'px-3.5 py-2.5'
+                  } ${
                     active
                       ? 'bg-[#E50914] text-white font-extrabold shadow-lg shadow-red-900/40'
                       : 'text-neutral-400 hover:bg-white/5 hover:text-white'
                   }`}
                 >
-                  <Icon className={`w-4 h-4 ${active ? 'text-white' : 'text-neutral-400'}`} />
-                  <span>{item.name}</span>
+                  <Icon className={`w-4 h-4 shrink-0 ${active ? 'text-white' : 'text-neutral-400'}`} />
+                  {!isSidebarCollapsed && <span className="truncate">{item.name}</span>}
                 </Link>
               );
             })}
@@ -103,13 +174,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
 
         {/* Footer Actions */}
-        <div className="pt-4 border-t border-white/10 space-y-1 text-xs">
+        <div className="pt-4 border-t border-white/10 space-y-1.5 text-xs">
           <Link
             href="/"
-            className="flex items-center gap-3 px-3 py-2 rounded-xl font-semibold text-neutral-400 hover:bg-white/5 hover:text-white transition-all"
+            title={isSidebarCollapsed ? 'Lihat Website Utama' : undefined}
+            className={`flex items-center gap-3 rounded-xl font-semibold text-neutral-400 hover:bg-white/5 hover:text-white transition-all ${
+              isSidebarCollapsed ? 'justify-center p-3' : 'px-3 py-2'
+            }`}
           >
-            <Globe className="w-4 h-4 text-neutral-400" />
-            <span>Lihat Website Utama</span>
+            <Globe className="w-4 h-4 text-neutral-400 shrink-0" />
+            {!isSidebarCollapsed && <span className="truncate">Lihat Website Utama</span>}
           </Link>
 
           <button
@@ -117,22 +191,57 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               logoutAdmin();
               router.push('/login');
             }}
-            className="flex items-center gap-3 w-full px-3 py-2 rounded-xl font-semibold text-neutral-400 hover:bg-red-500/10 hover:text-red-500 transition-all cursor-pointer"
+            title={isSidebarCollapsed ? 'Keluar' : undefined}
+            className={`flex items-center gap-3 w-full rounded-xl font-semibold text-neutral-400 hover:bg-red-500/10 hover:text-red-500 transition-all cursor-pointer ${
+              isSidebarCollapsed ? 'justify-center p-3' : 'px-3 py-2'
+            }`}
           >
-            <LogOut className="w-4 h-4" />
-            <span>Keluar</span>
+            <LogOut className="w-4 h-4 shrink-0" />
+            {!isSidebarCollapsed && <span className="truncate">Keluar</span>}
           </button>
         </div>
 
       </aside>
 
       {/* Main Content Area */}
-      <div className="flex-grow md:ml-64 flex flex-col min-h-screen max-w-full overflow-hidden">
+      <div
+        className={`flex-grow flex flex-col min-h-screen max-w-full overflow-hidden transition-all duration-300 ease-in-out ${
+          isSidebarCollapsed ? 'md:ml-20' : 'md:ml-64'
+        }`}
+      >
         
         {/* Sticky Admin Top Header Bar */}
-        <header className="sticky top-0 z-10 flex items-center justify-between border-b border-white/10 bg-[#0a0a0a]/90 backdrop-blur-xl px-6 py-3.5 font-sans">
-          <div>
-            <h1 className="text-base font-bold text-white tracking-tight">
+        <header className="sticky top-0 z-10 flex items-center justify-between border-b border-white/10 bg-[#0a0a0a]/90 backdrop-blur-xl px-4 md:px-6 py-3.5 font-sans">
+          <div className="flex items-center gap-3">
+            {/* Mobile Menu Button */}
+            <button
+              onClick={() => setIsMobileSidebarOpen(prev => !prev)}
+              className="p-2 rounded-xl bg-white/5 text-neutral-300 hover:text-white md:hidden cursor-pointer"
+              title="Buka Menu"
+            >
+              {isMobileSidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
+
+            {/* Desktop Hide/Show Sidebar Toggle */}
+            <button
+              onClick={toggleSidebar}
+              className="hidden md:inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-neutral-300 hover:text-white border border-white/10 text-xs font-semibold transition-all cursor-pointer"
+              title={isSidebarCollapsed ? 'Tampilkan Sidebar Penuh' : 'Sembunyikan / Perkecil Sidebar'}
+            >
+              {isSidebarCollapsed ? (
+                <>
+                  <PanelLeftOpen className="w-4 h-4 text-[#E50914]" />
+                  <span>Tampilkan Sidebar</span>
+                </>
+              ) : (
+                <>
+                  <PanelLeftClose className="w-4 h-4 text-neutral-400" />
+                  <span>Sembunyikan Sidebar</span>
+                </>
+              )}
+            </button>
+
+            <h1 className="text-sm md:text-base font-bold text-white tracking-tight truncate">
               Panel Kendali RTM MAUBERE
             </h1>
           </div>

@@ -1,19 +1,57 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useStreamContext, ShortItem } from '@/context/StreamContext';
-import { Video, Plus, Trash2, Edit2, X, Play, Youtube, AlertTriangle } from 'lucide-react';
+import { Video, Plus, Trash2, Edit2, X, Play, Youtube, AlertTriangle, Upload, Loader2, CheckCircle2 } from 'lucide-react';
 
 export default function AdminShortsPage() {
   const { shorts, addShort, deleteShort } = useStreamContext();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [deleteConfirmShort, setDeleteConfirmShort] = useState<ShortItem | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
   const [youtubeId, setYoutubeId] = useState('');
   const [thumbnail, setThumbnail] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsUploading(true);
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', 'short');
+
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success && data.url) {
+        setThumbnail(data.url);
+        showToast('✓ Thumbnail berhasil diupload!');
+      } else {
+        alert(data.error || 'Gagal upload thumbnail.');
+      }
+    } catch (err: any) {
+      alert('Gagal upload thumbnail: ' + (err?.message || 'Error'));
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,11 +69,20 @@ export default function AdminShortsPage() {
     setYoutubeId('');
     setThumbnail('');
     setIsModalOpen(false);
+    showToast('✓ Video Short berhasil ditambahkan!');
   };
 
   return (
     <div className="space-y-6 font-sans">
       
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed top-6 right-6 z-50 p-4 rounded-2xl bg-emerald-950/90 border border-emerald-500/40 text-emerald-300 text-xs font-bold shadow-2xl flex items-center gap-2.5 animate-in fade-in slide-in-from-top-3 backdrop-blur-md">
+          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/5 pb-5">
         <div>
@@ -49,7 +96,7 @@ export default function AdminShortsPage() {
 
         <button
           onClick={() => setIsModalOpen(true)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#E50914] text-white hover:bg-red-700 text-xs font-bold shadow-lg shadow-red-900/40 transition-all active:scale-95"
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#E50914] text-white hover:bg-red-700 text-xs font-bold shadow-lg shadow-red-900/40 transition-all active:scale-95 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span>Tambah Short Baru</span>
@@ -95,7 +142,7 @@ export default function AdminShortsPage() {
       {/* ADD SHORT MODAL */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50">
-          <div className="bg-[#121212] rounded-2xl p-6 max-w-md w-full border border-white/10 shadow-2xl space-y-4 font-sans">
+          <div className="bg-[#121212] rounded-2xl p-6 max-w-md w-full border border-white/10 shadow-2xl space-y-4 font-sans animate-in zoom-in-95">
             
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <h3 className="font-bold text-white text-base flex items-center gap-2">
@@ -143,13 +190,31 @@ export default function AdminShortsPage() {
               </div>
 
               <div>
-                <label className="block font-semibold text-neutral-300 mb-1">Custom Thumbnail URL (Opsional)</label>
+                <label className="block font-semibold text-neutral-300 mb-1">Custom Thumbnail</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="https://images.unsplash.com/... atau /uploads/..."
+                    value={thumbnail}
+                    onChange={(e) => setThumbnail(e.target.value)}
+                    className="w-full p-3 bg-black/60 border border-white/10 rounded-xl text-white focus:border-[#E50914] focus:outline-none font-mono text-[11px]"
+                  />
+                  <button
+                    type="button"
+                    disabled={isUploading}
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-4 py-3 rounded-xl bg-white/10 text-neutral-300 font-bold hover:bg-white/20 transition-all flex items-center gap-1.5 flex-shrink-0 cursor-pointer border border-white/10"
+                  >
+                    {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                    <span>Upload</span>
+                  </button>
+                </div>
                 <input
-                  type="text"
-                  placeholder="https://images.unsplash.com/..."
-                  value={thumbnail}
-                  onChange={(e) => setThumbnail(e.target.value)}
-                  className="w-full p-3 bg-black/60 border border-white/10 rounded-xl text-white focus:border-[#E50914] focus:outline-none"
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFileUpload}
+                  className="hidden"
                 />
               </div>
 
@@ -163,7 +228,8 @@ export default function AdminShortsPage() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-[#E50914] text-white hover:bg-red-700 font-bold shadow-lg shadow-red-900/30 cursor-pointer"
+                  disabled={isUploading}
+                  className="px-5 py-2 rounded-xl bg-[#E50914] text-white hover:bg-red-700 font-bold shadow-lg shadow-red-900/30 cursor-pointer disabled:opacity-50"
                 >
                   Simpan Short
                 </button>
@@ -211,13 +277,14 @@ export default function AdminShortsPage() {
                   deleteShort(deleteConfirmShort.id);
                   setIsDeleting(false);
                   setDeleteConfirmShort(null);
+                  showToast('✓ Short berhasil dihapus.');
                 }}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#E50914] hover:bg-red-700 text-white font-extrabold text-xs shadow-lg shadow-red-900/40 cursor-pointer"
+                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#E50914] hover:bg-red-700 text-white font-extrabold text-xs shadow-lg shadow-red-900/40 cursor-pointer disabled:opacity-50"
                 disabled={isDeleting}
               >
                 {isDeleting ? (
                   <>
-                    <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
+                    <Loader2 className="w-4 h-4 animate-spin" />
                     <span>Menghapus...</span>
                   </>
                 ) : (

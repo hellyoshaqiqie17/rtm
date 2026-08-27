@@ -62,6 +62,7 @@ export interface SiteSettings {
   termsContent: string;
   privacyContent: string;
   helpContent: string;
+  pinnedHeroChannelId?: string;
 }
 
 export const DEFAULT_SITE_SETTINGS: SiteSettings = {
@@ -74,6 +75,7 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
   termsContent: '',
   privacyContent: '',
   helpContent: '',
+  pinnedHeroChannelId: '',
 };
 
 export interface CategoryItem {
@@ -168,6 +170,48 @@ interface StreamContextType {
 
   // CMS Loaded state
   isCmsLoaded: boolean;
+}
+
+// Extract YouTube video ID from any format (watch, embed, short, live, shorts, etc.)
+export function extractYouTubeVideoId(url: string): string | null {
+  if (!url) return null;
+  const trimmed = url.trim();
+
+  // Direct 11-char ID
+  if (/^[a-zA-Z0-9_-]{11}$/.test(trimmed)) {
+    return trimmed;
+  }
+
+  // youtube.com/watch?v=VIDEO_ID
+  const watchMatch = trimmed.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
+  if (watchMatch) return watchMatch[1];
+
+  // youtube.com/embed/VIDEO_ID
+  const embedMatch = trimmed.match(/\/embed\/([a-zA-Z0-9_-]{11})/);
+  if (embedMatch) return embedMatch[1];
+
+  // youtube.com/live/VIDEO_ID
+  const liveMatch = trimmed.match(/\/live\/([a-zA-Z0-9_-]{11})/);
+  if (liveMatch) return liveMatch[1];
+
+  // youtu.be/VIDEO_ID
+  const shortMatch = trimmed.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/);
+  if (shortMatch) return shortMatch[1];
+
+  // youtube.com/v/VIDEO_ID or youtube.com/shorts/VIDEO_ID
+  const vMatch = trimmed.match(/\/(?:v|shorts)\/([a-zA-Z0-9_-]{11})/);
+  if (vMatch) return vMatch[1];
+
+  return null;
+}
+
+// Extract YouTube video ID and return high-quality thumbnail URL
+export function getYouTubeThumbnail(url: string): string | null {
+  const videoId = extractYouTubeVideoId(url);
+  if (videoId) {
+    return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+  }
+  return null;
 }
 
 const DEFAULT_LOGO = 'https://i.ibb.co.com/tT9zRDqv/RTM-LOGO-Jadi.png';
@@ -271,7 +315,31 @@ export function StreamProvider({ children }: { children: React.ReactNode }) {
         if (res.ok) {
           const data = await res.json();
           if (data?.channels && Array.isArray(data.channels)) {
-            setChannels(data.channels);
+            // Sort channels: pinned hero channel first, then by original creation order (already sorted by API)
+            const pinnedId = data?.siteSettings?.pinnedHeroChannelId || '';
+            const sorted = [...data.channels].sort((a: any, b: any) => {
+              if (a.id === pinnedId) return -1;
+              if (b.id === pinnedId) return 1;
+              return 0; // preserve API order (created_at ASC) for non-pinned
+            });
+            
+            // Auto-fill YouTube thumbnails for channels that still have default/unsplash images
+            const enriched = sorted.map((chan: any) => {
+              const isDefaultThumb = !chan.thumbnail || chan.thumbnail.includes('unsplash.com') || chan.thumbnail.includes('placeholder');
+              if (isDefaultThumb && chan.youtubeUrl) {
+                const ytThumb = getYouTubeThumbnail(chan.youtubeUrl);
+                if (ytThumb) return { ...chan, thumbnail: ytThumb };
+              }
+              return chan;
+            });
+            setChannels(enriched);
+            
+            // Auto-initialize activeChannelId on first load only (when it's still empty)
+            setActiveChannelId(prev => {
+              if (prev && enriched.some((c: any) => c.id === prev)) return prev; // keep current selection
+              if (pinnedId && enriched.some((c: any) => c.id === pinnedId)) return pinnedId;
+              return enriched.length > 0 ? enriched[0].id : '';
+            });
           }
           if (data?.radioChannels && Array.isArray(data.radioChannels)) {
             setRadioChannels(data.radioChannels);
@@ -308,8 +376,9 @@ export function StreamProvider({ children }: { children: React.ReactNode }) {
     };
 
     fetchServerCms();
-    // Poll every 5 seconds to keep all browsers in 100% strict real-time sync
-    const interval = setInterval(fetchServerCms, 5000);
+    // Dynamic polling: 10s for admin dashboard (to stay responsive), 30s for public pages to optimize CPU/RAM and eliminate client-side UI lagging
+    const isAdminRoute = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin');
+    const interval = setInterval(fetchServerCms, isAdminRoute ? 10000 : 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -397,22 +466,101 @@ export function StreamProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateCategory = (oldCategoryName: string, newCategoryName: string, image?: string) => {
-    const next = categoryObjects.map(c => {
+    const trimmedNew = newCategoryName.trim();
+    if (!trimmedNew) return;
+
+    // 1. Update categoryObjects
+    const nextCategories = categoryObjects.map(c => {
       if (c.name.toLowerCase() === oldCategoryName.toLowerCase()) {
         return {
           ...c,
-          name: newCategoryName.trim(),
+          name: trimmedNew,
           image: image !== undefined ? image : c.image || '',
         };
       }
       return c;
     });
-    saveCategoriesState(next);
+
+    // 2. Cascade update to all TV channels using oldCategoryName
+    const nextChannels = channels.map(chan => {
+      if (chan.category && chan.category.toLowerCase() === oldCategoryName.toLowerCase()) {
+        return { ...chan, category: trimmedNew };
+      }
+      return chan;
+    });
+
+    // 3. Cascade update to all Radio channels
+    const nextRadio = radioChannels.map(rad => {
+      if (rad.category && rad.category.toLowerCase() === oldCategoryName.toLowerCase()) {
+        return { ...rad, category: trimmedNew };
+      }
+      return rad;
+    });
+
+    // 4. Cascade update to all Schedules
+    const nextSchedules = schedules.map(sch => {
+      if (sch.category && sch.category.toLowerCase() === oldCategoryName.toLowerCase()) {
+        return { ...sch, category: trimmedNew };
+      }
+      return sch;
+    });
+
+    setCategoryObjects(nextCategories);
+    const names = nextCategories.map(o => o.name);
+    setCategories(names);
+    setChannels(nextChannels);
+    setRadioChannels(nextRadio);
+    setSchedules(nextSchedules);
+
+    // Sync all affected states to server CMS in one single atomic call
+    syncToServerCms({
+      categories: names,
+      categoryObjects: nextCategories,
+      channels: nextChannels,
+      radioChannels: nextRadio,
+      schedules: nextSchedules,
+    });
   };
 
   const deleteCategory = (categoryName: string) => {
-    const next = categoryObjects.filter((c) => c.name.toLowerCase() !== categoryName.toLowerCase());
-    saveCategoriesState(next);
+    const nextCategories = categoryObjects.filter((c) => c.name.toLowerCase() !== categoryName.toLowerCase());
+    const names = nextCategories.map(o => o.name);
+    const fallbackCategory = names[0] || 'TV On Demand';
+
+    const nextChannels = channels.map(chan => {
+      if (chan.category && chan.category.toLowerCase() === categoryName.toLowerCase()) {
+        return { ...chan, category: fallbackCategory };
+      }
+      return chan;
+    });
+
+    const nextRadio = radioChannels.map(rad => {
+      if (rad.category && rad.category.toLowerCase() === categoryName.toLowerCase()) {
+        return { ...rad, category: fallbackCategory };
+      }
+      return rad;
+    });
+
+    const nextSchedules = schedules.map(sch => {
+      if (sch.category && sch.category.toLowerCase() === categoryName.toLowerCase()) {
+        return { ...sch, category: fallbackCategory };
+      }
+      return sch;
+    });
+
+    setCategoryObjects(nextCategories);
+    setCategories(names);
+    setChannels(nextChannels);
+    setRadioChannels(nextRadio);
+    setSchedules(nextSchedules);
+
+    syncToServerCms({
+      categories: names,
+      categoryObjects: nextCategories,
+      channels: nextChannels,
+      radioChannels: nextRadio,
+      schedules: nextSchedules,
+    });
   };
 
   const addSchedule = (newSchData: Omit<ScheduleItem, 'id'>) => {

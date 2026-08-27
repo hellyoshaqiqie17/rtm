@@ -18,9 +18,9 @@ const categoryBgs: Record<string, string> = {
 };
 
 export default function HomePage() {
-  const { channels, activeChannel, setActiveChannelId, radioUrl, setRadioUrl, categories, isCmsLoaded } = useStreamContext();
+  const { channels, activeChannel, setActiveChannelId, radioUrl, setRadioUrl, categories, categoryObjects, isCmsLoaded, siteSettings } = useStreamContext();
 
-  const heroChannel = activeChannel || channels[0];
+  const heroChannel = (channels || []).find(c => c.id === siteSettings?.pinnedHeroChannelId) || activeChannel || channels[0];
 
   const [heroVideoUrl, setHeroVideoUrl] = useState<string | null>(null);
 
@@ -211,35 +211,59 @@ export default function HomePage() {
           <TVPlayer />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 pt-2">
-            {channels.filter((c) => c && c.id).map((chan) => (
-              <div
-                key={chan.id}
-                onClick={() => setActiveChannelId(chan.id)}
-                className="group bg-[#121212] rounded-2xl border border-white/5 overflow-hidden shadow-xl hover:border-white/20 transition-all cursor-pointer"
-              >
-                <div className="relative aspect-video w-full overflow-hidden bg-black">
-                  <img
-                    src={chan.thumbnail}
-                    alt={chan.name}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                  />
-                  <div className="absolute top-3 left-3 px-2.5 py-1 rounded bg-[#E50914] text-white font-mono text-[10px] font-bold uppercase">
-                    {chan.category || 'TV On Demand'}
+            {channels.filter((c) => c && c.id).slice(0, 6).map((chan) => {
+              const isActive = activeChannel && chan.id === activeChannel.id;
+              return (
+                <div
+                  key={chan.id}
+                  onClick={() => {
+                    setActiveChannelId(chan.id);
+                    const playerElement = document.getElementById('rtm-tv-player');
+                    if (playerElement) {
+                      playerElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                  }}
+                  className={`group bg-[#121212] rounded-2xl border overflow-hidden shadow-xl transition-all cursor-pointer ${
+                    isActive ? 'border-[#E50914] ring-2 ring-[#E50914]/30' : 'border-white/5 hover:border-white/20'
+                  }`}
+                >
+                  <div className="relative aspect-video w-full overflow-hidden bg-black">
+                    <img
+                      src={chan.thumbnail}
+                      alt={chan.name}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                    <div className="absolute top-3 left-3 px-2.5 py-1 rounded bg-[#E50914] text-white font-mono text-[10px] font-bold uppercase">
+                      {chan.category || 'TV On Demand'}
+                    </div>
+                    {chan.activeSource !== 'youtube' && (
+                      <div className="absolute bottom-3 left-3 flex items-center gap-1.5 bg-black/80 px-2.5 py-1 rounded text-[10px] font-mono font-bold text-emerald-400 border border-emerald-500/30">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> LIVE
+                      </div>
+                    )}
                   </div>
-                  <div className="absolute bottom-3 left-3 flex items-center gap-1.5 bg-black/80 px-2.5 py-1 rounded text-[10px] font-mono font-bold text-emerald-400 border border-emerald-500/30">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> LIVE
+                  <div className="p-4 space-y-1">
+                    <h3 className="font-bold text-white text-sm line-clamp-1 group-hover:text-[#E50914] transition-colors">
+                      {chan.name}
+                    </h3>
+                    <span className="text-xs text-neutral-400 block font-mono line-clamp-1">
+                      {chan.currentProgram}
+                    </span>
                   </div>
                 </div>
-                <div className="p-4 space-y-1">
-                  <h3 className="font-bold text-white text-sm line-clamp-1 group-hover:text-[#E50914] transition-colors">
-                    {chan.name}
-                  </h3>
-                  <span className="text-xs text-neutral-400 block font-mono line-clamp-1">
-                    {chan.currentProgram}
-                  </span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
+          </div>
+
+          {/* READ MORE / LIHAT SEMUA BUTTON DIRECT TO TV LIVE */}
+          <div className="flex justify-center pt-3">
+            <Link
+              href="/tv"
+              className="inline-flex items-center gap-2 px-8 py-3.5 rounded-2xl bg-[#121212] hover:bg-[#E50914] border border-white/10 hover:border-[#E50914] text-white font-extrabold text-xs tracking-wider uppercase transition-all duration-300 shadow-xl group hover:shadow-red-900/40 cursor-pointer"
+            >
+              <span>Lihat Semua Siaran TV Live</span>
+              <ChevronRight className="w-4 h-4 text-[#E50914] group-hover:text-white group-hover:translate-x-1 transition-all" />
+            </Link>
           </div>
         </section>
 
@@ -285,19 +309,26 @@ export default function HomePage() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 font-sans">
-              {categories.filter(Boolean).map((catName, idx) => {
-                const bg = categoryBgs[catName] || 'https://images.unsplash.com/photo-1594909122845-11baa439b7bf?w=500&auto=format&fit=crop&q=80';
+              {(categoryObjects && categoryObjects.length > 0
+                ? categoryObjects
+                : categories.map(c => ({ id: c, name: c, image: '' }))
+              ).filter(c => c && c.name).map((catObj, idx) => {
+                const catName = catObj.name;
+                const bg = catObj.image || categoryBgs[catName] || 'https://images.unsplash.com/photo-1594909122845-11baa439b7bf?w=500&auto=format&fit=crop&q=80';
 
                 return (
                   <Link
-                    key={idx}
+                    key={catObj.id || idx}
                     href="/tv"
                     className="group relative h-36 rounded-2xl border border-white/5 overflow-hidden shadow-xl bg-[#121212] flex items-end p-5 transition-all hover:border-[#E50914]/50 hover:shadow-[0_0_25px_rgba(229,9,20,0.2)] cursor-pointer"
                   >
                     <img
                       src={bg}
                       alt={catName}
-                      className="absolute inset-0 w-full h-full object-cover opacity-40 group-hover:scale-105 transition-transform duration-300"
+                      className="absolute inset-0 w-full h-full object-cover opacity-50 group-hover:scale-105 transition-transform duration-300"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1594909122845-11baa439b7bf?w=500&auto=format&fit=crop&q=80';
+                      }}
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent"></div>
                     <span className="relative z-10 font-extrabold text-white text-base tracking-tight uppercase group-hover:text-[#E50914] transition-colors">
